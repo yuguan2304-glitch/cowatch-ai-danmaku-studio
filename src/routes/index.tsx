@@ -62,7 +62,6 @@ export function Index() {
       <aside role="dialog" aria-modal={settingsOpen} aria-label="共映设置侧栏" aria-hidden={!settingsOpen} className={["fixed right-0 top-0 z-[160] flex h-[100dvh] w-[min(92vw,440px)] flex-col border-l border-border bg-background shadow-2xl transition-transform duration-200",settingsOpen?"translate-x-0":"translate-x-full pointer-events-none"].join(" ")}>
         <div className="flex shrink-0 items-center justify-between border-b border-border p-4"><h2 className="flex items-center gap-2 font-bold"><Settings2 className="size-5"/> 共映设置</h2><Button size="sm" variant="ghost" aria-label="关闭设置侧栏" onClick={()=>setSettingsOpen(false)}><X className="size-5"/></Button></div>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 pb-10">
-          <div className="flex justify-end"><Button variant="outline" size="sm" onClick={()=>navigator.clipboard.writeText(location.origin).then(()=>toast.success("已复制链接"),()=>toast.error("复制失败"))}>分享网站</Button></div>
           <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🎬 视频辅助工具</summary><SourceBar toolsOnly/></details>
           <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🎛️ 弹幕显示</summary><DisplayControls/></details>
           <GenerationPanel/>
