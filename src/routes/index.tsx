@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { TranslationPanel } from "@/components/theater/TranslationPanel";
 
 export const Route = createFileRoute("/")({ component: Index });
-function Index() {
+export function Index() {
   const s = useApp();
   const key = useSecrets(x => x.apiKey);
   const setKey = useSecrets(x => x.setApiKey);
