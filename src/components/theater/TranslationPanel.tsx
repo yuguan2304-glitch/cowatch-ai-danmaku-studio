@@ -186,15 +186,26 @@ export function TranslationPanel(){
    }finally{setBusy(false);setTranscriptionProgress("");if(abort.current===ctrl)abort.current=null;}
  };
  const [cloudSample,setCloudSample]=useState(true);
- const [sameAsDanmaku,setSameAsDanmaku]=useState(true);
+ const [transcribePreset,setTranscribePreset]=useState<"groq"|"shared"|"custom">(()=>{
+   try {
+     const saved=localStorage.getItem("cowatch:transcribe-preset:v1");
+     return saved==="shared"||saved==="custom"?saved:"groq";
+   }catch{return "groq";}
+ });
+ useEffect(()=>{
+   try {localStorage.setItem("cowatch:transcribe-preset:v1",transcribePreset);}catch{/* private browsing */}
+ },[transcribePreset]);
+ const groqBaseUrl="https://api.groq.com/openai/v1";
+ const groqModel="whisper-large-v3-turbo";
  const extractAudioSubtitles=async()=>{
    const file=source.file;
    if(!file){toast.error("请先打开本地视频文件");return;}
-   const baseUrl=sameAsDanmaku?provider.baseUrl:provider.transcribeBaseUrl;
+   const baseUrl=transcribePreset==="groq"?groqBaseUrl:transcribePreset==="shared"?provider.baseUrl:provider.transcribeBaseUrl;
    const checked=checkBaseUrl(baseUrl);
    if(!checked.ok){toast.error(checked.reason);return;}
-   const transKey=sameAsDanmaku?key:(provider.transcribeUseMainKey?key:transcriptionKey);
-   if(!transKey){toast.error("请先配置所选接口密钥；复用弹幕中转站时使用弹幕密钥。");return;}
+   const transKey=transcribePreset==="groq"?transcriptionKey:transcribePreset==="shared"?key:(provider.transcribeUseMainKey?key:transcriptionKey);
+   const transModel=transcribePreset==="groq"?groqModel:provider.transcribeModel;
+   if(!transKey){toast.error(transcribePreset==="groq"?"请在下方填写自己的 Groq API Key（免费额度属于你自己的账户）。":"请先配置所选接口密钥。");return;}
    const large=file.size>25*1024*1024;
    if(!confirm(cloudSample
      ?"仅将视频开头约 30 秒的音频发送到 "+checked.url.host+" 的语音转录接口测试，可能产生费用。继续？"
@@ -202,7 +213,7 @@ export function TranslationPanel(){
      :"将视频「"+file.name+"」发送到 "+checked.url.host+" 转录，可能产生费用。继续？"))return;
    const ctrl=new AbortController();abort.current=ctrl;setBusy(true);
    try{
-     const result=await transcribeVideoWithAudioChunks({baseUrl,apiKey:transKey,model:provider.transcribeModel,file,signal:ctrl.signal,...(cloudSample?{maxSeconds:30}:{}),onProgress:setTranscriptionProgress});
+     const result=await transcribeVideoWithAudioChunks({baseUrl,apiKey:transKey,model:transModel,file,signal:ctrl.signal,...(cloudSample?{maxSeconds:30}:{}),onProgress:setTranscriptionProgress});
      if(!result.timestamped){toast.error("转录结果没有时间戳，无法自动与视频对齐。请改用支持时间戳的模型。");return;}
      useApp.getState().setCues(result.cues,cloudSample?"云端转录测试（前30秒）":"AI 音轨转录");
      toast.success("提取成功！已得到 "+result.cues.length+" 段字幕。接下来点击「翻译视频字幕」。");
@@ -218,12 +229,33 @@ export function TranslationPanel(){
    <p className="font-semibold text-sm">① 取得视频字幕</p>
    <p className="text-xs text-muted-foreground">{cues.length?("已准备 "+cues.length+" 段字幕，可以直接进行下一步。"):"还没有字幕。可在视频上方导入 SRT/VTT，或从本地短视频提取音轨字幕。"}</p>
    <div className="rounded-lg border border-primary/30 p-3 space-y-3 text-sm">
-     <p className="font-semibold">中转站语音转录（推荐）</p>
-     <label className="flex items-center gap-2"><input type="checkbox" checked={sameAsDanmaku} disabled={busy} onChange={e=>setSameAsDanmaku(e.target.checked)}/>直接使用弹幕 API 地址和密钥</label>
-     <p className="text-xs text-muted-foreground break-all">请求：{sameAsDanmaku?provider.baseUrl:provider.transcribeBaseUrl}/audio/transcriptions。聊天模型不一定能识别音频；中转站需开放语音转录端点和相应模型。</p>
-     <label className="block text-xs">转录模型 ID
-       <Input disabled={busy} value={provider.transcribeModel} placeholder="whisper-1" onChange={e=>useApp.getState().update("provider",{transcribeModel:e.target.value})}/>
+     <p className="font-semibold">语音转录服务</p>
+     <label className="block text-xs">选择转录来源
+       <select className="w-full rounded border bg-background p-2" disabled={busy} value={transcribePreset} onChange={e=>setTranscribePreset(e.target.value as typeof transcribePreset)}>
+         <option value="groq">Groq 免费额度（推荐新用户）</option>
+         <option value="shared">复用弹幕中转站 API</option>
+         <option value="custom">其他独立转录 API</option>
+       </select>
      </label>
+     {transcribePreset==="groq"?<>
+       <p className="text-xs text-muted-foreground">Groq 为每个账户提供有限的免费语音转录额度；需要先申请自己的 API Key。网站不会提供公共密钥，也不会自动购买付费额度。</p>
+       <p className="text-xs break-all">接口：<code>{groqBaseUrl}/audio/transcriptions</code></p>
+       <p className="text-xs">模型：<code>{groqModel}</code></p>
+       <a className="text-xs underline text-primary" href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">前往 Groq 获取免费 API Key</a>
+       <label className="block text-xs">你的 Groq API Key
+         <Input type="password" autoComplete="off" disabled={busy} placeholder="gsk_..." value={transcriptionKey} onChange={e=>useSecrets.getState().setTranscribeKey(e.target.value)}/>
+       </label>
+       <label className="flex items-center gap-2 text-xs"><input type="checkbox" disabled={busy} checked={rememberTranscriptionKey&&rememberTranscription} onChange={e=>{setRememberTranscription(e.target.checked);setRememberTranscriptionKey(e.target.checked);}}/>记住此密钥（仅当前浏览器、明文存储；请勿在共享设备开启）</label>
+       <p className="text-xs text-muted-foreground">免费使用次数和音频时长受 Groq 限制；浏览器直连可能遭遇跨域限制。先用 30 秒测试确认可用。</p>
+     </>:transcribePreset==="shared"?<>
+       <p className="text-xs text-muted-foreground break-all">请求：{provider.baseUrl}/audio/transcriptions · 模型：{provider.transcribeModel}。聊天接口可用不代表站点提供语音识别。</p>
+       <label className="block text-xs">语音转录模型 ID
+         <Input disabled={busy} value={provider.transcribeModel} placeholder="whisper-1" onChange={e=>useApp.getState().update("provider",{transcribeModel:e.target.value})}/>
+       </label>
+     </>:<>
+       <p className="text-xs text-muted-foreground">请在下方的「高级配置：独立转录 API 地址和密钥」填写地址、模型和密钥。</p>
+       <p className="text-xs break-all">当前地址：{provider.transcribeBaseUrl}/audio/transcriptions · 模型：{provider.transcribeModel}</p>
+     </>}
      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={cloudSample} disabled={busy} onChange={e=>setCloudSample(e.target.checked)}/>先测试视频前 30 秒（可能产生一次 API 费用）</label>
      <Button size="sm" disabled={busy||source.kind!=="file"} onClick={()=>void extractAudioSubtitles()}>{cloudSample?"测试识别前30秒":"转录整段视频"}</Button>
      <p className="text-xs text-muted-foreground">整段转录时，大视频会在手机本地提取压缩音频，再分段传给转录 API；无需下载 Whisper 本地模型。</p>
