@@ -19,7 +19,33 @@ export function bannedWordList(a: AudienceConfig): string[] {
     .filter(Boolean);
 }
 
-export function buildSystemPrompt(a: AudienceConfig, noSpoiler: boolean): string {
+/** Select brief worldbook notes using line tags, not the entire book each request.
+ * Format: [tag1,tag2] Something about a character; [*] is always included.
+ * Untagged lines are matched against title/cues, never sent unconditionally.
+ */
+export function relevantWorldBook(book: string, title: string, cues: Cue[]): string {
+  if (!book.trim()) return "";
+  const haystack = (title + "\n" + cues.map(c => c.text).join(" ")).toLowerCase();
+  const found: string[] = [];
+  let size = 0;
+  for (const raw of book.split(/\r?\n/).slice(0, 500)) {
+    const line = raw.trim().slice(0, 350);
+    if (!line || line.startsWith("#")) continue;
+    const match = /^\[([^\]]{1,90})\]\s*(.+)$/.exec(line);
+    const note = match ? match[2]! : line;
+    const tags = match ? match[1]!.split(/[,，、|]/).map(s => s.trim().toLowerCase()).filter(Boolean) : [];
+    const eligible = tags.length
+      ? tags.some(tag => tag === "*" || (tag.length >= 2 && haystack.includes(tag)))
+      : (note.split(/[\s，、。,:：;；]/).some(word => word.length >= 3 && haystack.includes(word.toLowerCase())));
+    if (!eligible || size + note.length > 1200) continue;
+    found.push(note);
+    size += note.length;
+    if (found.length >= 12) break;
+  }
+  return found.join("\n");
+}
+
+export function buildSystemPrompt(a: AudienceConfig, noSpoiler: boolean, title = "", cues: Cue[] = []): string {
   const langs = LANGUAGES.filter((l) => a.languages.includes(l.id)).map((l) => l.label);
   const ids = weighted(IDENTITIES, a.identities);
   const tones = weighted(TONES, a.tones);
@@ -83,6 +109,8 @@ export function buildSystemPrompt(a: AudienceConfig, noSpoiler: boolean): string
   }
   const banned = bannedWordList(a);
   if (banned.length) lines.push("", `## 全局禁词\n绝不使用：${banned.join("、")}`);
+  const notes = relevantWorldBook(a.worldBook ?? "", title, cues);
+  if (notes) lines.push("", "## 世界书相关背景（仅作人物、梗与语言参考，不能当成视频中实际发生的事）", notes);
   if (a.extraPrompt.trim()) lines.push("", "## 额外要求", a.extraPrompt.trim());
   return lines.join("\n");
 }

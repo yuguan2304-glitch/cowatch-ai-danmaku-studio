@@ -61,6 +61,7 @@ export function defaultAudience(): AudienceConfig {
     memorySize: 20,
     globalBannedWords: "",
     extraPrompt: "",
+    worldBook: "",
     shipPairs: "",
     blockedPairs: "",
   };
@@ -94,6 +95,7 @@ export function defaultSettings(): Settings {
       bufferMode: "full",
       lookahead: 60,
       maxRetries: 2,
+      requestLimit: 10,
     },
     audience: defaultAudience(),
     display: {

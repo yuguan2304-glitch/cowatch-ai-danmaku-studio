@@ -28,7 +28,8 @@ export function estimateCost(
 ): CostEstimate {
   const { analysis, generation, provider } = settings;
   const segLen = Math.max(5, analysis.segmentLength);
-  const requests = duration > 0 ? Math.ceil(duration / segLen) : 0;
+  const allSegments = duration > 0 ? Math.ceil(duration / segLen) : 0;
+  const requests = Math.min(allSegments, generation.requestLimit == null ? allSegments : Math.max(1, generation.requestLimit));
   const framesPerSeg = opts.canUseFrames && !opts.useVideo ? Math.max(1, Math.floor(segLen / analysis.frameInterval)) : 0;
   const frames = framesPerSeg * requests;
   const systemTokens = 900;

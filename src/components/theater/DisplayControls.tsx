@@ -1,7 +1,6 @@
 import { Maximize, SlidersHorizontal } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RangeField } from "@/components/form-bits";
 import { useApp } from "@/lib/store";
 import { toggleFullscreen } from "@/lib/clock";
@@ -13,7 +12,7 @@ const AREAS = [
   { v: 1, label: "全屏" },
 ];
 
-export function DisplayControls() {
+export function DisplayControls({ inDrawer = false }: { inDrawer?: boolean } = {}) {
   const d = useApp((s) => s.settings.display);
   const update = useApp((s) => s.update);
   const count = useApp((s) => s.danmaku.length);
@@ -24,14 +23,10 @@ export function DisplayControls() {
         <span>弹幕 {d.enabled ? "开" : "关"}</span>
       </label>
       <span className="text-xs text-muted-foreground">{count} 条</span>
-      <div className="ml-auto flex items-center gap-2">
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button size="sm" variant="secondary">
-              <SlidersHorizontal /> 显示设置
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-80 space-y-4">
+      <div className={inDrawer ? "flex w-full flex-col gap-2" : "ml-auto flex items-center gap-2"}>
+        <details className={inDrawer ? "w-full rounded-lg border border-border p-2" : "rounded-lg border border-border p-2"}>
+          <summary className="cursor-pointer font-semibold"><SlidersHorizontal className="mr-1 inline size-4" /> 显示设置（展开调整）</summary>
+          <div className="mt-3 space-y-4">
             <RangeField
               label="滚动速度（穿屏秒数，越小越快）"
               value={d.crossSeconds}
@@ -75,8 +70,9 @@ export function DisplayControls() {
               显示观众名
               <Switch checked={d.showViewer} onCheckedChange={(showViewer) => update("display", { showViewer })} />
             </label>
-          </PopoverContent>
-        </Popover>
+
+          </div>
+        </details>
         <Button size="sm" variant="secondary" onClick={() => void toggleFullscreen()}>
           <Maximize /> 全屏
         </Button>
