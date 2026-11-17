@@ -21,6 +21,9 @@ export function TranslationPanel(){
  const cues=useApp(s=>s.cues), comments=useApp(s=>s.danmaku), provider=useApp(s=>s.settings.provider), session=useApp(s=>s.sessionId), source=useApp(s=>s.source), key=useSecrets(s=>s.apiKey), transcriptionKey=useSecrets(s=>s.transcribeKey);
  const [service,setService]=useState<"google"|"custom"|"shared">(()=>loadTranslationPrefs()?.service??"shared");
  const [transcriptionProgress,setTranscriptionProgress]=useState("");
+ const [localModelCheck,setLocalModelCheck]=useState("");
+ const [checkingModel,setCheckingModel]=useState(false);
+ const [localError,setLocalError]=useState("");
  const [translationKey,setTranslationKey]=useState(()=>getRememberedTranslationKey()),[translationUrl,setTranslationUrl]=useState(()=>loadTranslationPrefs()?.url??"https://api.openai.com/v1"),[translationModel,setTranslationModel]=useState(()=>loadTranslationPrefs()?.model??"gpt-4o-mini");
  const [rememberTranslationKey,setRememberTranslationKey]=useState(()=>loadTranslationPrefs()?.rememberSecret??false);
  const [rememberTranscription,setRememberTranscription]=useState(()=>loadTranscriptionPrefs()!==null);
@@ -114,7 +117,26 @@ export function TranslationPanel(){
    }
    return "音轨转录失败（" + transcriptionAddress + " / " + provider.transcribeModel + "）：" + message;
  };
+ const checkLocalModelAccess = async () => {
+   const url = "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/main/config.json";
+   setCheckingModel(true);
+   setLocalModelCheck("正在检查 Hugging Face 小型模型配置文件（不会下载模型或调用付费 API）…");
+   try {
+     const ctrl = new AbortController();
+     const timeout = window.setTimeout(()=>ctrl.abort(),12000);
+     let response: Response;
+     try { response = await fetch(url,{signal:ctrl.signal,cache:"no-store",credentials:"omit"}); }
+     finally {clearTimeout(timeout);}
+     if(!response.ok) throw new Error("HTTP "+response.status);
+     const config = await response.json() as {model_type?:string};
+     if(config.model_type!=="whisper")throw new Error("收到意外的模型配置内容");
+     setLocalModelCheck("✓ 模型配置文件连接正常。完整模型及运行库仍需下载，可能受到网络限制。");
+   }catch(e){
+     setLocalModelCheck("✕ Hugging Face 连接失败（"+(e instanceof Error?e.message:String(e))+"）。请换个网络或在浏览器打开 huggingface.co 测试；无法在网页端绕过跨域限制。此检测没有下载完整模型，也不消耗 API 额度。");
+   }finally{setCheckingModel(false);}
+ };
  const localTranscribe = async (full: boolean) => {
+   setLocalError("");
    const file = source.file;
    if(!file){toast.error("请先打开本地视频");return;}
    if(cues.length && !confirm("已有字幕，本次本机识别结果将替换当前字幕。建议先导出 SRT 备份，继续吗？"))return;
@@ -136,7 +158,11 @@ export function TranslationPanel(){
      if(!result.length){toast.warning("没有识别出英语语音。请检查原视频是否有声音，或导入已有字幕。");return;}
      toast.success("本机识别完成：" + result.length + " 段字幕。接下来可点击翻译视频字幕。");
    }catch(e){
-     if(!ctrl.signal.aborted)toast.error("本机识别未完成：" + (e instanceof Error?e.message:String(e)),{duration:9000});
+     if(!ctrl.signal.aborted){
+       const message=e instanceof Error?e.message:String(e);
+       setLocalError(message);
+       toast.error("本机识别未完成：" + message,{duration:11000});
+     }
    }finally{setBusy(false);setTranscriptionProgress("");if(abort.current===ctrl)abort.current=null;}
  };
  const extractAudioSubtitles=async()=>{
@@ -170,6 +196,9 @@ export function TranslationPanel(){
        <Button size="sm" disabled={busy||source.kind!=="file"} onClick={()=>void localTranscribe(false)}>免费识别前 2 分钟（先测试）</Button>
        <Button size="sm" variant="outline" disabled={busy||source.kind!=="file"} onClick={()=>void localTranscribe(true)}>免费识别整段视频</Button>
      </div>
+     <Button size="sm" variant="ghost" disabled={busy||checkingModel} onClick={()=>void checkLocalModelAccess()}>{checkingModel?"检测中…":"检测模型下载连接（免费、小流量）"}</Button>
+     {localModelCheck&&<p role="status" className="rounded border border-border p-2 text-xs break-words">{localModelCheck}</p>}
+     {localError&&<p role="alert" className="rounded border border-destructive/40 p-2 text-xs break-words">上次识别失败：{localError}。若是模型下载失败，可先点击上方连接检测。已下载的部分资源可能留在浏览器缓存中。</p>}
      <p className="text-xs text-muted-foreground">仅对本地视频启用，支持情况依浏览器。多人说话、游戏音效与重叠对白可能识别不准；可在下方编辑字幕。字幕翻译仍可能使用收费 API。</p>
    </div>
    <details className="rounded border border-border bg-background/60 p-2 text-xs space-y-2">
