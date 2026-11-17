@@ -15,7 +15,7 @@ export async function openaiChat(opts: {
   images: { dataUrl: string }[];
   imageDetail: "low" | "auto" | "high";
   jsonMode: boolean;
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
 }): Promise<ChatResult> {
   const content: unknown[] = [{ type: "text", text: opts.userText }];
   for (const img of opts.images) {
@@ -28,7 +28,7 @@ export async function openaiChat(opts: {
       { role: "user", content: opts.images.length ? content : opts.userText },
     ],
   };
-  if (opts.jsonMode) body.response_format = { type: "json_object" };
+  if (opts.jsonMode) body["response_format"] = { type: "json_object" };
   let res: Response;
   try {
     res = await fetch(join(opts.baseUrl, "/chat/completions"), {
@@ -38,7 +38,7 @@ export async function openaiChat(opts: {
         ...(opts.apiKey ? { Authorization: `Bearer ${opts.apiKey}` } : {}),
       },
       body: JSON.stringify(body),
-      signal: opts.signal,
+      signal: opts.signal ?? null,
       credentials: "omit",
       referrerPolicy: "no-referrer",
     });
@@ -82,7 +82,7 @@ export async function transcribe(opts: {
   apiKey: string;
   model: string;
   file: File;
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
 }): Promise<{ cues: { start: number; end: number; text: string }[]; timestamped: boolean }> {
   const attempt = async (format: "verbose_json" | "json") => {
     const fd = new FormData();
@@ -95,7 +95,7 @@ export async function transcribe(opts: {
         method: "POST",
         headers: opts.apiKey ? { Authorization: `Bearer ${opts.apiKey}` } : {},
         body: fd,
-        signal: opts.signal,
+        signal: opts.signal ?? null,
         credentials: "omit",
         referrerPolicy: "no-referrer",
       });
