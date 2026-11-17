@@ -13,16 +13,49 @@ import { Input } from "@/components/ui/input";
 import { ModelPicker } from "@/components/theater/ModelPicker";
 import { useSubtitleDisplay } from "@/lib/subtitle-display";
 import { transcribeVideoWithAudioChunks } from "@/lib/ai/video-transcribe";
+import { loadTranslationPrefs, saveTranslationPrefs, getRememberedTranslationKey, saveTranslationKey, loadTranscriptionPrefs, saveTranscriptionPrefs, getRememberedTranscriptionKey, saveTranscriptionKey } from "@/lib/translation-preferences";
 type Translated = { index:number; text:string };
 function stamp(n:number){const ms=Math.max(0,Math.round(n*1000));return [Math.floor(ms/3600000),Math.floor(ms/60000)%60,Math.floor(ms/1000)%60].map(x=>String(x).padStart(2,"0")).join(":")+","+String(ms%1000).padStart(3,"0");}
 export function TranslationPanel(){
  const cues=useApp(s=>s.cues), comments=useApp(s=>s.danmaku), provider=useApp(s=>s.settings.provider), session=useApp(s=>s.sessionId), source=useApp(s=>s.source), key=useSecrets(s=>s.apiKey), transcriptionKey=useSecrets(s=>s.transcribeKey);
- const [service,setService]=useState<"google"|"custom"|"shared">("shared");
+ const [service,setService]=useState<"google"|"custom"|"shared">(()=>loadTranslationPrefs()?.service??"shared");
  const [transcriptionProgress,setTranscriptionProgress]=useState("");
- const [translationKey,setTranslationKey]=useState(""),[translationUrl,setTranslationUrl]=useState("https://api.openai.com/v1"),[translationModel,setTranslationModel]=useState("gpt-4o-mini");
- const [target,setTarget]=useState("简体中文"),[glossary,setGlossary]=useState(""),[commentTranslations,setCommentTranslations]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[time,setTime]=useState(0);
+ const [translationKey,setTranslationKey]=useState(()=>getRememberedTranslationKey()),[translationUrl,setTranslationUrl]=useState(()=>loadTranslationPrefs()?.url??"https://api.openai.com/v1"),[translationModel,setTranslationModel]=useState(()=>loadTranslationPrefs()?.model??"gpt-4o-mini");
+ const [rememberTranslationKey,setRememberTranslationKey]=useState(()=>loadTranslationPrefs()?.rememberSecret??false);
+ const [rememberTranscription,setRememberTranscription]=useState(()=>loadTranscriptionPrefs()!==null);
+ const [rememberTranscriptionKey,setRememberTranscriptionKey]=useState(()=>loadTranscriptionPrefs()?.rememberSecret??false);
+ const settingsLoaded=useApp(s=>s.settingsLoaded);
+ const [target,setTarget]=useState(()=>loadTranslationPrefs()?.target??"简体中文"),[glossary,setGlossary]=useState(()=>loadTranslationPrefs()?.glossary??""),[commentTranslations,setCommentTranslations]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[time,setTime]=useState(0);
  const mode=useSubtitleDisplay(s=>s.mode),setMode=useSubtitleDisplay(s=>s.setMode),translated=useSubtitleDisplay(s=>s.translated),setTranslated=useSubtitleDisplay(s=>s.setTranslated),mergeTranslated=useSubtitleDisplay(s=>s.mergeTranslated);
  const abort=useRef<AbortController|null>(null);
+ useEffect(()=>{
+   saveTranslationPrefs({service,url:translationUrl,model:translationModel,target,glossary,rememberSecret:rememberTranslationKey});
+   saveTranslationKey(translationKey,rememberTranslationKey);
+ },[service,translationUrl,translationModel,target,glossary,rememberTranslationKey,translationKey]);
+ // Restore the separately opted-in transcription endpoint after IndexedDB
+ // loads defaults. Never overwrite a configured endpoint before bootstrap.
+ const restoredTranscription=useRef(false);
+ useEffect(()=>{
+   if(!settingsLoaded||restoredTranscription.current)return;
+   restoredTranscription.current=true;
+   const saved=loadTranscriptionPrefs();
+   if(saved){
+     useApp.getState().update("provider",{
+       transcribeBaseUrl:saved.address,transcribeModel:saved.model,transcribeUseMainKey:saved.useMainKey,
+     });
+     if(saved.rememberSecret)useSecrets.getState().setTranscribeKey(getRememberedTranscriptionKey());
+   }
+ },[settingsLoaded]);
+ useEffect(()=>{
+   if(!settingsLoaded||!restoredTranscription.current)return;
+   if(rememberTranscription){
+     saveTranscriptionPrefs({address:provider.transcribeBaseUrl,model:provider.transcribeModel,useMainKey:provider.transcribeUseMainKey,rememberSecret:rememberTranscriptionKey});
+     saveTranscriptionKey(transcriptionKey,rememberTranscriptionKey&&!provider.transcribeUseMainKey);
+   }else{
+     try {localStorage.removeItem("cowatch:transcription-remember:v1");}catch{/* private mode */}
+     saveTranscriptionKey("",false);
+   }
+ },[settingsLoaded,rememberTranscription,rememberTranscriptionKey,provider.transcribeBaseUrl,provider.transcribeModel,provider.transcribeUseMainKey,transcriptionKey]);
  useEffect(()=>{setTranslated({});abort.current?.abort();},[cues,target,session]);
  useEffect(()=>{setCommentTranslations({});abort.current?.abort();},[target,session]);
  useEffect(()=>{const timer=window.setInterval(()=>setTime(getClock()?.getTime()??0),200);return()=>{clearInterval(timer);abort.current?.abort();};},[]);
@@ -122,7 +155,9 @@ export function TranslationPanel(){
      {!provider.transcribeUseMainKey&&<label className="block">转录专用密钥
        <Input type="password" value={transcriptionKey} disabled={busy} onChange={e=>useSecrets.getState().setTranscribeKey(e.target.value)}/>
      </label>}
-     <Button size="sm" type="button" variant="outline" disabled={busy||usingMainEndpoint} onClick={()=>{
+     <label className="flex items-center gap-2"><input type="checkbox" disabled={busy} checked={rememberTranscription} onChange={e=>setRememberTranscription(e.target.checked)}/>记住转录地址与模型（保存在本机）</label>
+   {rememberTranscription&&!provider.transcribeUseMainKey&&<label className="flex items-center gap-2"><input type="checkbox" disabled={busy} checked={rememberTranscriptionKey} onChange={e=>setRememberTranscriptionKey(e.target.checked)}/>同时记住转录密钥（本机明文存储，仅个人设备使用）</label>}
+   <Button size="sm" type="button" variant="outline" disabled={busy||usingMainEndpoint} onClick={()=>{
        useApp.getState().update("provider",{transcribeBaseUrl:provider.baseUrl});
        toast.info("已复制弹幕 API 地址。注意：仍需确认供应商确实支持音频转录接口；本操作不会发送请求。");
      }}>复制弹幕 API 地址到转录设置</Button>
@@ -135,7 +170,9 @@ export function TranslationPanel(){
    <p className="font-semibold text-sm">② 选择翻译方式</p>
    <label className="block text-sm">翻译服务<select className="w-full rounded border bg-background p-2" disabled={busy} value={service} onChange={e=>{setTranslationKey("");setService(e.target.value as typeof service);}}><option value="custom">独立 OpenAI 兼容 API</option><option value="google">Google Cloud Translation</option><option value="shared">复用弹幕 AI 接口</option></select></label>
  {service==="custom"&&<><label className="block text-sm">翻译 API 地址<Input disabled={busy} value={translationUrl} onChange={e=>{setTranslationKey("");setTranslationUrl(e.target.value);}}/></label><div className={busy?"pointer-events-none opacity-50":""}><ModelPicker kind="openai" baseUrl={translationUrl} apiKey={translationKey} model={translationModel} onModelChange={setTranslationModel}/></div></>}
- {service!=="shared"&&<label className="block text-sm">独立翻译 API 密钥<Input type="password" autoComplete="off" disabled={busy} value={translationKey} onChange={e=>setTranslationKey(e.target.value)}/></label>}
+ {service!=="shared"&&<><label className="block text-sm">独立翻译 API 密钥<Input type="password" autoComplete="off" disabled={busy} value={translationKey} onChange={e=>setTranslationKey(e.target.value)}/></label>
+ <label className="flex items-center gap-2 text-xs"><input type="checkbox" disabled={busy} checked={rememberTranslationKey} onChange={e=>setRememberTranslationKey(e.target.checked)}/>记住翻译密钥（仅保存在此设备的浏览器明文存储；不适用于共享设备）</label></>}
+ <p className="text-xs text-muted-foreground">翻译方式、API 地址、模型、目标语言和术语表会自动保存在本机；密钥只有勾选记住后才会在刷新后保留。</p>
  {service==="google"&&<p className="text-xs text-muted-foreground">需启用 Google Cloud Translation Basic API（可能收费）；本模式不使用自定义术语表。</p>}
  <label className="block text-sm">目标语言 <select className="w-full rounded border bg-background p-2" disabled={busy} value={target} onChange={e=>setTarget(e.target.value)}>{["简体中文","繁體中文","English","日本語","한국어","Español","Français"].map(x=><option key={x}>{x}</option>)}</select></label>
  <label className="block text-sm">术语表（人名、角色名、圈内梗）<Textarea disabled={busy} value={glossary} onChange={e=>setGlossary(e.target.value)} placeholder="例如：原词 = 译名"/></label>
