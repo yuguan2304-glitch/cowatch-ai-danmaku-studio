@@ -90,13 +90,13 @@ export function visibleAt(
   let hi = placed.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (placed[mid].time < earliest) lo = mid + 1;
+    if (placed[mid]!.time < earliest) lo = mid + 1;
     else hi = mid;
   }
   const out: { item: PlacedDanmaku; x: number }[] = [];
-  for (let i = lo; i < placed.length && placed[i].time <= t; i++) {
-    const x = positionAt(placed[i], t, containerWidth, crossSeconds);
-    if (x !== null) out.push({ item: placed[i], x });
+  for (let i = lo; i < placed.length && placed[i]!.time <= t; i++) {
+    const x = positionAt(placed[i]!, t, containerWidth, crossSeconds);
+    if (x !== null) out.push({ item: placed[i]!, x });
   }
   return out;
 }
