@@ -41,3 +41,8 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 }
+
+// Origin-scoped WebView message channel for exporting local JSON/XML files.
+dependencies {
+    implementation 'androidx.webkit:webkit:1.18.0'
+}
