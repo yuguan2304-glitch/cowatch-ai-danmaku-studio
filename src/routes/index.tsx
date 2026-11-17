@@ -34,8 +34,8 @@ function Index() {
   };
   const test=async()=>{
     const valid=checkBaseUrl(p.baseUrl);
-    if(!valid.ok) return toast.error(valid.reason);
-    if(!key) return toast.error("请填写 API 密钥");
+    if(!valid.ok) { toast.error(valid.reason); return; }
+    if(!key) { toast.error("请填写 API 密钥"); return; }
     if(!window.confirm("向 "+valid.url.host+" 发送测试请求，可能产生少量费用。继续？"))return;
     setTesting(true);
     try {const r=await (p.kind==="gemini"?geminiTest:openaiTest)(p.baseUrl,key,p.model);toast.success("连接成功 · "+r.ms+"ms");}
