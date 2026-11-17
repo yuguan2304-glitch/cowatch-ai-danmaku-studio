@@ -41,9 +41,16 @@ export function Player() {
   }, []);
 
   useEffect(() => {
-    const overflow = document.body.style.overflow;
-    if (fauxFullscreen) document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = overflow; };
+    const bodyOverflow = document.body.style.overflow;
+    const htmlOverflow = document.documentElement.style.overflow;
+    if (fauxFullscreen) {
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+    }
+    return () => {
+      document.body.style.overflow = bodyOverflow;
+      document.documentElement.style.overflow = htmlOverflow;
+    };
   }, [fauxFullscreen]);
 
   const fmt = (seconds: number) => {
@@ -101,7 +108,23 @@ export function Player() {
       ref={(el) => {
         stageRef.current = el;
       }}
-      className={["group/stage relative aspect-video w-full overflow-hidden rounded-lg bg-screen shadow-screen", fauxFullscreen ? "fixed z-[200] aspect-auto rounded-none bg-black" : "", fauxFullscreen && portrait ? "left-[100vw] top-0 h-[100vw] w-[100dvh] origin-top-left rotate-90" : "", fauxFullscreen && !portrait ? "inset-0 h-[100dvh] w-[100dvw]" : ""].join(" ")}
+      className="group/stage relative aspect-video w-full overflow-hidden rounded-lg bg-screen shadow-screen"
+      // Inline positioning overrides the base 'relative/aspect-video' styles.
+      // Utility classes alone can resolve in the wrong order, leaving a rotated
+      // player embedded in the page (rather than covering the viewport).
+      style={fauxFullscreen ? {
+        position: "fixed",
+        zIndex: 9999,
+        top: 0,
+        left: portrait ? "100vw" : 0,
+        width: portrait ? "100dvh" : "100dvw",
+        height: portrait ? "100dvw" : "100dvh",
+        transform: portrait ? "rotate(-90deg)" : "none",
+        transformOrigin: "top left",
+        aspectRatio: "auto",
+        borderRadius: 0,
+        backgroundColor: "#000",
+      } : undefined}
       data-fs={fauxFullscreen}
       onDragOver={(e) => {
         if (source.kind === "none") {
