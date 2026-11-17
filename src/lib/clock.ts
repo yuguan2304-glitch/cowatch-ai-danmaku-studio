@@ -22,5 +22,5 @@ export const stageRef: { current: HTMLDivElement | null } = { current: null };
 export async function toggleFullscreen() {
   // Player handles native fullscreen + mobile landscape fallback.
   // A custom event keeps both control-bar and in-video buttons in sync.
-  stageRef.current?.dispatchEvent(new Event("cowatch:toggle-fullscreen"));
+  window.dispatchEvent(new Event("cowatch:toggle-fullscreen"));
 }
