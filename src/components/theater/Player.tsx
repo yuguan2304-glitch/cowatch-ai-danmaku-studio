@@ -51,8 +51,12 @@ export function Player() {
           if (orientation?.lock) await orientation.lock("landscape");
           else { checkPortrait(); setFullscreenHint("如果画面仍是竖屏，请旋转手机或开启系统自动旋转。"); }
         } catch {
+          // Some Android in-app browsers allow fullscreen but deny orientation.lock.
+          // Fall back to a rotated fixed-position theater while keeping subtitles and danmaku.
+          try { await document.exitFullscreen(); } catch { /* native exit may be unsupported */ }
           checkPortrait();
-          setFullscreenHint("手机未允许强制横屏，可旋转手机或开启系统自动旋转。");
+          setFauxFullscreen(true);
+          setFullscreenHint("已启用兼容横屏模式。若画面方向异常，可尝试关闭系统旋转锁定。");
         }
       }
     };
