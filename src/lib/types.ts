@@ -134,3 +134,33 @@ export type ViewerPreset = {
   createdAt: number;
   audience: AudienceConfig;
 };
+
+/** Simulated comments created locally or by the configured AI, never real public posts. */
+export type TheaterComment = {
+  id: string;
+  name: string;
+  text: string;
+  liked: boolean;
+  likes: number;
+  replyTo?: string;
+};
+
+/** Private on-device collection; local File stays in IndexedDB, not on CoWatch servers. */
+export type SavedScreening = {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  sourceKind: Exclude<SourceKind, "none">;
+  sourceLabel: string;
+  /** Original user-selected video, stored only on this browser/device. */
+  file?: File;
+  sourceUrl?: string;
+  thumbnail?: string;
+  duration: number;
+  danmaku: Danmaku[];
+  demo: boolean;
+  cues: Cue[];
+  cueLabel: string;
+  comments: TheaterComment[];
+};
