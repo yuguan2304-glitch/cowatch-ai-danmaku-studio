@@ -93,13 +93,13 @@ export function Index() {
           {Boolean(a.identities["shipper"]) && <ShipControls/>}
           <p className="text-sm">语气（多选）</p><div className="flex flex-wrap gap-1">{TONES.map(x=><Button key={x.id} size="sm" variant={a.tones[x.id]?"default":"outline"} onClick={()=>toggleWeight("tones",x.id)}>{x.label}</Button>)}</div>
           <label className="block text-sm">🎭 自定义弹幕语气与说话方式（每行一种）
-            <Textarea rows={5} disabled={s.generating} value={a.customTones??""} placeholder={"阴阳怪气：哎哟喂，某人又开始了（）\n慢半拍：等下？我是不是漏看了啥\n熟人吐槽：别急，我知道他下一秒又要整活了"} onChange={e=>s.update("audience",{customTones:e.target.value.slice(0,6000)})}/>
+            <Textarea rows={5} disabled={s.generating} value={a.customTones??""} placeholder={"轻松调侃：这波操作有点意思（）\n慢半拍：等下？我是不是漏看了啥\n熟人吐槽：别急，我知道他下一秒又要整活了"} onChange={e=>s.update("audience",{customTones:e.target.value.slice(0,6000)})}/>
             <span className="block text-xs text-muted-foreground">可以写口癖、说话节奏、弹幕举例，每行一个风格。AI 会自然混合使用，不会逐字复读。用户指定风格会跟上面已有的语气一起生效。</span>
           </label>
           <details className="rounded-lg border border-border p-3 space-y-2">
             <summary className="cursor-pointer font-semibold">📖 我的世界书 · 梗 / 人设 / 口癖</summary>
             <p className="text-xs text-muted-foreground">**活人感建议：**用 [观众:昵称] 固定这位观众的口癖和反应习惯；[*] 表示所有观众适用；[角色名] 仅当标题或当前字幕提及角色时触发。每行一条，单次最多采用 12 条、1200 字。别把示例当成视频中真实发生的事。</p>
-            <Textarea rows={7} value={a["worldBook"] ?? ""} disabled={s.generating} placeholder={"[观众:老粉] 看见熟悉操作会先调侃两句，偶尔打个（）\n[观众:考据党] 喜欢短短补充来历，平时说话比较克制\n[Dream] 可以玩 Dream 爱炫耀的梗，但不能编造实际台词\n[*] 观众发言要有长短差异，不要所有人统一句式"} onChange={e=>s.update("audience",{worldBook:e.target.value.slice(0,50000)})}/>
+            <Textarea rows={7} value={a["worldBook"] ?? ""} disabled={s.generating} placeholder={"[观众:老粉] 看见熟悉操作会先调侃两句，偶尔打个（）\n[观众:考据党] 喜欢短短补充来历，平时说话比较克制\n[角色 A] 仅在出现相关角色时使用熟悉的梗，不编造实际台词\n[*] 观众发言要有长短差异，不要所有人统一句式"} onChange={e=>s.update("audience",{worldBook:e.target.value.slice(0,50000)})}/>
             <div className="flex flex-wrap gap-2">
 
               <Button size="sm" variant="outline" disabled={!(a["worldBook"]??"").trim()} onClick={()=>downloadText("cowatch-worldbook.txt",a["worldBook"]??"","text/plain")}>导出备份</Button>

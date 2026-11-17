@@ -42,8 +42,8 @@ export function ShipControls() {
     <p className="text-sm font-bold">💞 CP 偏好 · 固定左右 / 杂食无差</p>
     <p className="text-xs text-muted-foreground">固定左右：左边攻、右边受，禁止逆 CP。无差杂食：只要是这两个人，顺序可互换。每一组 CP 单独选择，未列出的组合不允许主动拉郎。优先遵守下方的屏蔽 CP。</p>
     <div className="grid grid-cols-2 gap-2">
-      <label className="text-xs">攻（左） / 角色 A<Input disabled={disabled} placeholder="Techno" value={left} onChange={e=>setLeft(e.target.value)}/></label>
-      <label className="text-xs">受（右） / 角色 B<Input disabled={disabled} placeholder="Dream" value={right} onChange={e=>setRight(e.target.value)}/></label>
+      <label className="text-xs">攻（左） / 角色 A<Input disabled={disabled} placeholder="角色 A" value={left} onChange={e=>setLeft(e.target.value)}/></label>
+      <label className="text-xs">受（右） / 角色 B<Input disabled={disabled} placeholder="角色 B" value={right} onChange={e=>setRight(e.target.value)}/></label>
     </div>
     <label className="block text-xs">这一组的嗑法
       <select disabled={disabled} className="w-full rounded border bg-background p-2 text-sm" value={mode} onChange={e=>setMode(e.target.value==="reversible"?"reversible":"fixed")}>
@@ -72,7 +72,7 @@ export function ShipControls() {
       <p className="text-muted-foreground">请转换并核对左右；新 CP 规则存在时优先使用新列表。</p>
     </div>}
     <label className="block text-xs">禁嗑 CP（每行一组，双向都屏蔽）
-      <Textarea rows={2} disabled={disabled} placeholder={"Dream × George\n角色C × 角色D"} value={a.blockedPairs??""} onChange={e=>update("audience",{blockedPairs:e.target.value})}/>
+      <Textarea rows={2} disabled={disabled} placeholder={"角色 A × 角色 B\n角色 C × 角色 D"} value={a.blockedPairs??""} onChange={e=>update("audience",{blockedPairs:e.target.value})}/>
     </label>
   </div>;
 }
