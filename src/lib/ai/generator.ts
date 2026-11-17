@@ -111,7 +111,7 @@ async function runSegment(seg: Segment, signal: AbortSignal) {
 
   // Material strictly up to this segment's end (no-spoiler friendly).
   const frameTimes = material.canFrames && !material.useVideo ? frameTimesFor(seg.start, seg.end, settings.analysis.frameInterval) : [];
-  let images: { time: number; dataUrl: string }[] = [];
+  let images: { time: number; dataUrl: string; visualChange?: number }[] = [];
   if (frameTimes.length) {
     if (!extractor) extractor = new FrameExtractor(source.src, source.crossOrigin);
     try {
