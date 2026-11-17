@@ -16,17 +16,17 @@ export function parseVideoUrl(input: string): ParsedVideoUrl {
   }
   const host = url.hostname.replace(/^www\.|^m\./, "");
   if (host === "youtu.be") {
-    const id = url.pathname.slice(1).split("/")[0];
+    const id = url.pathname.slice(1).split("/")[0] ?? "";
     if (/^[\w-]{11}$/.test(id)) return { kind: "youtube", id };
   }
-  if (host.endsWith("youtube.com") || host === "youtube-nocookie.com") {
+  if ((host === "youtube.com" || host.endsWith(".youtube.com")) || host === "youtube-nocookie.com") {
     const v = url.searchParams.get("v");
     if (v && /^[\w-]{11}$/.test(v)) return { kind: "youtube", id: v };
     const m = url.pathname.match(/^\/(?:embed|shorts|live)\/([\w-]{11})/);
-    if (m) return { kind: "youtube", id: m[1] };
+    if (m?.[1]) return { kind: "youtube", id: m[1] };
     return { kind: "invalid", reason: "无法识别 YouTube 视频 ID" };
   }
-  if (host.endsWith("bilibili.com") || host === "b23.tv") {
+  if ((host === "bilibili.com" || host.endsWith(".bilibili.com")) || host === "b23.tv") {
     const bv = (url.pathname + url.search).match(/(BV[0-9A-Za-z]{10})/);
     const page = url.searchParams.get("p") ?? "1";
     if (bv) {
