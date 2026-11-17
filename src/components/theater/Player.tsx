@@ -34,7 +34,7 @@ export function Player() {
       if (v) resumeRef.current = {time:v.currentTime, playing:!v.paused};
       checkPortrait();
       setControlsVisible(true);
-      if (stageRef.current?.dataset.fs === "true") {
+      if (stageRef.current?.dataset["fs"] === "true") {
         setFauxFullscreen(false);
         setOrientationNote("");
         try { screen.orientation.unlock(); } catch { /* no permission required for fallback */ }
