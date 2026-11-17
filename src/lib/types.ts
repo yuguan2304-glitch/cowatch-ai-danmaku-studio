@@ -27,6 +27,8 @@ export type AudienceConfig = {
   memorySize: number;
   globalBannedWords: string;
   extraPrompt: string;
+  /** Optional local world book. Only relevant short lines are sent to AI. */
+  worldBook?: string;
   /** Explicitly allowed CP pairings, separated by newline or commas. */
   shipPairs?: string;
   /** Pairings users do not want mentioned. */
@@ -63,6 +65,8 @@ export type GenerationConfig = {
   bufferMode: "full" | "live";
   lookahead: number;
   maxRetries: number;
+  /** Maximum number of successful/attempted segments in one generation run. */
+  requestLimit?: number | null;
 };
 
 export type DisplayConfig = {
