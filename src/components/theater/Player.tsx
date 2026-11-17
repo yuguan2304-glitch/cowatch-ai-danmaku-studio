@@ -21,10 +21,12 @@ export function Player() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
-  const [volume, setVolume] = useState(1);
   const [brightness, setBrightness] = useState(1);
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
-  const touchStart = useRef<{ x: number; y: number; v: number; b: number } | null>(null);
+  const touchStart = useRef<{ x: number; y: number; v: number; b: number; brightnessSide: boolean; changed: boolean } | null>(null);
+  const seekingRef = useRef(false);
+  const seekTrackRef = useRef<HTMLDivElement>(null);
+  const [gestureHint, setGestureHint] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const isHtmlVideo = source.kind === "file" || source.kind === "url";
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -94,10 +96,10 @@ export function Player() {
   // Real video players hide their controls while playing. Any tap on empty
   // video space toggles them; clicks on buttons and the seek bar are ignored.
   useEffect(() => {
-    if (!controlsVisible || !playing || !isHtmlVideo) return;
+    if (!controlsVisible || !playing || !isHtmlVideo || seekPreview !== null || gestureHint) return;
     const timeout = window.setTimeout(() => setControlsVisible(false), 3200);
     return () => window.clearTimeout(timeout);
-  }, [controlsVisible, playing, isHtmlVideo]);
+  }, [controlsVisible, playing, isHtmlVideo, seekPreview, gestureHint]);
 
   const leaveCinema = async () => {
     if (document.fullscreenElement) {
@@ -113,6 +115,22 @@ export function Player() {
     if (!Number.isFinite(seconds)) return "0:00";
     const v = Math.max(0, Math.floor(seconds));
     return Math.floor(v/60)+":"+String(v%60).padStart(2,"0");
+  };
+  const seekAt = (clientX: number, clientY: number) => {
+    const track = seekTrackRef.current;
+    const v = videoRef.current;
+    if (!track || !v || !Number.isFinite(v.duration) || v.duration <= 0) return;
+    const rect = track.getBoundingClientRect();
+    // When the cinema is rotated with CSS, the track runs vertically in
+    // viewport coordinates. Measure against its own local horizontal axis.
+    const rotated = fauxFullscreen && portrait;
+    const fraction = rotated
+      ? (clientY - rect.top) / Math.max(rect.height, 1)
+      : (clientX - rect.left) / Math.max(rect.width, 1);
+    const time = Math.min(v.duration, Math.max(0, fraction * v.duration));
+    v.currentTime = time;
+    setCurrentTime(time);
+    setSeekPreview(time);
   };
   const togglePlayback = () => {
     const video = videoRef.current;
@@ -224,7 +242,7 @@ export function Player() {
           onPlay={() => { setPlaying(true); setControlsVisible(true); }}
           onPause={() => setPlaying(false)}
           onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-          onVolumeChange={(e) => { setMuted(e.currentTarget.muted); setVolume(e.currentTarget.volume); }}
+          onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
           onEnded={() => setPlaying(false)}
         />
       )}
@@ -276,35 +294,99 @@ export function Player() {
         </div>
       )}
 
-      {isHtmlVideo && <button
-        type="button"
-        aria-label={controlsVisible ? "隐藏播放控制条" : "显示播放控制条"}
-        onClick={() => setControlsVisible(v => !v)}
-        onTouchStart={e => { const t=e.touches[0]; if(t) touchStart.current={x:t.clientX,y:t.clientY,v:videoRef.current?.volume??1,b:brightness}; }}
-        onTouchEnd={e => {
-          const g=touchStart.current, t=e.changedTouches[0]; touchStart.current=null;
-          if (!g || !t) return;
-          const dy=g.y-t.clientY;
-          if (Math.abs(dy)<35 || Math.abs(dy)<Math.abs(t.clientX-g.x)*1.4) return;
-          const rect=e.currentTarget.getBoundingClientRect();
-          const delta=dy/Math.max(150,rect.height);
-          if(g.x<rect.left+rect.width/2) setBrightness(Math.max(0.15,Math.min(1,g.b+delta)));
-          else if(videoRef.current){videoRef.current.volume=Math.max(0,Math.min(1,g.v+delta));videoRef.current.muted=false;}
-          setControlsVisible(true);
+      {isHtmlVideo && <div
+        aria-label="播放画面：左侧上下滑调亮度，右侧上下滑调音量"
+        onPointerDown={(e) => {
+          if (e.pointerType === "mouse") return;
+          const localX = e.nativeEvent.offsetX;
+          touchStart.current = {
+            x: e.clientX, y: e.clientY,
+            v: videoRef.current?.volume ?? 1, b: brightness,
+            brightnessSide: localX < e.currentTarget.clientWidth / 2,
+            changed: false,
+          };
+          e.currentTarget.setPointerCapture(e.pointerId);
         }}
+        onPointerMove={(e) => {
+          const g = touchStart.current;
+          if (!g || e.pointerType === "mouse") return;
+          const rotated = fauxFullscreen && portrait;
+          const deltaPx = rotated ? e.clientX - g.x : g.y - e.clientY;
+          const sideways = rotated ? Math.abs(e.clientY - g.y) : Math.abs(e.clientX - g.x);
+          if (!g.changed && (Math.abs(deltaPx) < 12 || sideways > Math.abs(deltaPx) * 1.4)) return;
+          g.changed = true;
+          const delta = deltaPx / Math.max(150, e.currentTarget.clientHeight);
+          if (g.brightnessSide) {
+            const next = Math.max(0.15, Math.min(1, g.b + delta));
+            setBrightness(next);
+            setGestureHint("☀ 亮度 " + Math.round(next * 100) + "%");
+          } else if (videoRef.current) {
+            const next = Math.max(0, Math.min(1, g.v + delta));
+            videoRef.current.volume = next;
+            videoRef.current.muted = false;
+            setGestureHint("♫ 音量 " + Math.round(next * 100) + "%");
+          }
+        }}
+        onPointerUp={(e) => {
+          const g = touchStart.current;
+          touchStart.current = null;
+          setGestureHint("");
+          if (g && !g.changed) setControlsVisible(v => !v);
+        }}
+        onPointerCancel={() => { touchStart.current = null; setGestureHint(""); }}
+        onClick={(e) => { if (e.detail !== 0) setControlsVisible(v => !v); }}
         className="absolute inset-0 z-30 h-full w-full cursor-default bg-transparent"
-        style={{ touchAction: "manipulation" }}
+        style={{ touchAction: "none" }}
       />}
+      {gestureHint && <div aria-live="polite" className="pointer-events-none absolute left-1/2 top-1/2 z-[45] -translate-x-1/2 -translate-y-1/2 rounded-lg bg-black/75 px-4 py-2 text-sm font-semibold text-white">{gestureHint}</div>}
 
       {isHtmlVideo && <div data-player-control aria-hidden={!controlsVisible} className={["absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-2 pt-8 text-white transition-opacity duration-200", !controlsVisible ? "pointer-events-none opacity-0" : "opacity-100"].join(" ")}>
-        <input type="range" aria-label="视频进度（拖动跳转）" className="mb-2 h-6 w-full cursor-pointer accent-amber-400" min={0} max={Math.max(1,duration)} step={0.1} value={Math.min(seekPreview ?? currentTime,Math.max(1,duration))} onPointerDown={() => setSeekPreview(currentTime)} onChange={e=>{const t=Number(e.target.value);setSeekPreview(t);if(videoRef.current)videoRef.current.currentTime=t;setCurrentTime(t);}} onPointerUp={()=>setSeekPreview(null)} onPointerCancel={()=>setSeekPreview(null)}/>
+        <div
+          ref={seekTrackRef}
+          role="slider"
+          tabIndex={0}
+          aria-label="视频进度（拖动跳转）"
+          aria-valuemin={0}
+          aria-valuemax={Math.max(0, duration)}
+          aria-valuenow={Math.min(seekPreview ?? currentTime, Math.max(0, duration))}
+          aria-valuetext={fmt(seekPreview ?? currentTime) + " / " + fmt(duration)}
+          className="group/seek relative mb-2 flex h-7 w-full cursor-pointer touch-none items-center outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+          onPointerDown={(e) => {
+            if (duration <= 0) return;
+            seekingRef.current = true;
+            e.currentTarget.setPointerCapture(e.pointerId);
+            seekAt(e.clientX, e.clientY);
+          }}
+          onPointerMove={(e) => {
+            if (seekingRef.current) seekAt(e.clientX, e.clientY);
+          }}
+          onPointerUp={(e) => {
+            if (seekingRef.current) seekAt(e.clientX, e.clientY);
+            seekingRef.current = false;
+            setSeekPreview(null);
+          }}
+          onPointerCancel={() => { seekingRef.current = false; setSeekPreview(null); }}
+          onKeyDown={(e) => {
+            if (!videoRef.current || !Number.isFinite(duration) || duration <= 0) return;
+            const delta = e.key === "ArrowRight" ? 5 : e.key === "ArrowLeft" ? -5 : 0;
+            if (delta) {
+              e.preventDefault();
+              const time = Math.max(0, Math.min(duration, videoRef.current.currentTime + delta));
+              videoRef.current.currentTime = time;
+              setCurrentTime(time);
+            }
+          }}
+        >
+          <div className="relative h-1.5 w-full rounded-full bg-white/40 transition-[height] group-hover/seek:h-2.5">
+            <div className="absolute inset-y-0 left-0 rounded-full bg-amber-400" style={{ width: (duration > 0 ? Math.min(100, 100 * (seekPreview ?? currentTime) / duration) : 0) + "%" }} />
+            <div className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-300 shadow" style={{ left: (duration > 0 ? Math.min(100, 100 * (seekPreview ?? currentTime) / duration) : 0) + "%" }} />
+          </div>
+        </div>
         {seekPreview !== null && <div className="mb-1 text-center text-xs text-amber-300">跳转至 {fmt(seekPreview)}</div>}
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1 text-xs" title="画面亮度（只改变播放器画面）">☀ <input type="range" aria-label="画面亮度" min="0.15" max="1" step="0.05" value={brightness} onChange={e=>setBrightness(Number(e.target.value))} className="w-12 accent-amber-400 sm:w-16"/></label>
           <button type="button" className="rounded bg-black/40 p-2" aria-label={playing?"暂停":"播放"} onClick={togglePlayback}>{playing?<Pause className="size-5"/>:<Play className="size-5"/>}</button>
           <span className="text-xs tabular-nums">{fmt(currentTime)} / {fmt(duration)}</span>
           <div className="ml-auto flex items-center gap-2">
-            <input type="range" aria-label="视频音量" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={e=>{const v=videoRef.current;if(v){v.volume=Number(e.target.value);v.muted=false;}}} className="w-12 accent-amber-400 sm:w-20"/>
             <button type="button" className="rounded bg-black/40 p-2" aria-label={muted?"取消静音":"静音"} onClick={()=>{const v=videoRef.current;if(v)v.muted=!v.muted;}}>{muted?<VolumeX className="size-5"/>:<Volume2 className="size-5"/>}</button>
             <button type="button" onClick={() => void toggleFullscreen()} className="rounded bg-amber-400 px-3 py-2 font-semibold text-black" aria-label={fauxFullscreen?"退出横屏":"横屏放大"}>{fauxFullscreen?<Minimize className="size-5"/>:<Maximize className="size-5"/>}</button>
           </div>
