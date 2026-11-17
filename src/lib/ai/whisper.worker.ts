@@ -30,13 +30,21 @@ let recognizer: Recognizer | null = null;
 const createPipeline = pipeline as unknown as (task: string, model: string, options: Record<string, unknown>) => Promise<Recognizer>;
 
 type WorkerRequest =
-  | { kind: "load" }
+  | { kind: "load"; modelHost?: string }
   | { kind: "recognize"; id: number; data: Float32Array; offset: number };
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const data = event.data;
   try {
     if (!recognizer) {
+      if (data.kind === "load" && data.modelHost) {
+        // Use an explicitly selected HTTPS model source; no silent fallback.
+        const parsed = new URL(data.modelHost);
+        if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) {
+          throw new Error("模型下载地址必须是有效的 HTTPS 域名");
+        }
+        env.remoteHost = parsed.origin + "/";
+      }
       self.postMessage({kind: "progress", text: "首次使用：正在下载并缓存本地英语语音模型（可能消耗较多流量）…"});
       recognizer = await createPipeline("automatic-speech-recognition", "onnx-community/whisper-tiny.en", {
         device: "wasm",
