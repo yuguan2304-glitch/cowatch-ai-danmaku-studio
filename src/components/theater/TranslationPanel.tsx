@@ -39,12 +39,9 @@ export function TranslationPanel(){
    if(!settingsLoaded||restoredTranscription.current)return;
    restoredTranscription.current=true;
    const saved=loadTranscriptionPrefs();
-   if(saved){
-     useApp.getState().update("provider",{
-       transcribeBaseUrl:saved.address,transcribeModel:saved.model,transcribeUseMainKey:saved.useMainKey,
-     });
-     if(saved.rememberSecret)useSecrets.getState().setTranscribeKey(getRememberedTranscriptionKey());
-   }
+   // Endpoint/model were already restored by bootstrap, avoiding a stale
+   // post-mount update that could overwrite the saved values.
+   if(saved?.rememberSecret)useSecrets.getState().setTranscribeKey(getRememberedTranscriptionKey());
  },[settingsLoaded]);
  useEffect(()=>{
    if(!settingsLoaded||!restoredTranscription.current)return;
