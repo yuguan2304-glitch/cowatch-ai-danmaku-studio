@@ -199,7 +199,6 @@ export function TranslationPanel(){
    </div>
    <Button size="sm" variant="outline" disabled={busy||source.kind!=="file"||!!cues.length} onClick={()=>void extractAudioSubtitles()}>从本地视频提取并 AI 转录字幕</Button>
    <p className="text-xs text-muted-foreground">大视频会先本地实时提取小音频段，再发送到配置的收费转录接口；保持页面前台。</p>
-     </div>
    </details>
    {transcriptionProgress&&<p role="status" className="text-xs text-primary">{transcriptionProgress}</p>}
    </div>
