@@ -25,24 +25,24 @@ export function bannedWordList(a: AudienceConfig): string[] {
  */
 export function relevantWorldBook(book: string, title: string, cues: Cue[]): string {
   if (!book.trim()) return "";
-  const haystack = (title + "\\n" + cues.map(c => c.text).join(" ")).toLowerCase();
+  const haystack = (title + "\n" + cues.map(c => c.text).join(" ")).toLowerCase();
   const found: string[] = [];
   let size = 0;
-  for (const raw of book.split(/\\r?\\n/).slice(0, 500)) {
+  for (const raw of book.split(/\r?\n/).slice(0, 500)) {
     const line = raw.trim().slice(0, 350);
     if (!line || line.startsWith("#")) continue;
-    const match = /^\\[([^\\]]{1,90})\\]\\s*(.+)$/.exec(line);
+    const match = /^\[([^\]]{1,90})\]\s*(.+)$/.exec(line);
     const note = match ? match[2]! : line;
     const tags = match ? match[1]!.split(/[,，、|]/).map(s => s.trim().toLowerCase()).filter(Boolean) : [];
     const eligible = tags.length
       ? tags.some(tag => tag === "*" || (tag.length >= 2 && haystack.includes(tag)))
-      : (note.split(/[\\s，、。,:：;；]/).some(word => word.length >= 3 && haystack.includes(word.toLowerCase())));
+      : (note.split(/[\s，、。,:：;；]/).some(word => word.length >= 3 && haystack.includes(word.toLowerCase())));
     if (!eligible || size + note.length > 1200) continue;
     found.push(note);
     size += note.length;
     if (found.length >= 12) break;
   }
-  return found.join("\\n");
+  return found.join("\n");
 }
 
 export function buildSystemPrompt(a: AudienceConfig, noSpoiler: boolean, title = "", cues: Cue[] = []): string {
