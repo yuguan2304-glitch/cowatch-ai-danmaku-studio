@@ -1,0 +1,84 @@
+name: Android Signed Public Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version e.g. 0.2.0-beta.1'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  signed-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: android-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Ensure Android SDK
+        shell: bash
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
+          test -n "$SDKMANAGER"
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+      - name: Validate required release secrets and version
+        shell: bash
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.COWATCH_SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.COWATCH_SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.COWATCH_SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.COWATCH_SIGNING_KEY_PASSWORD }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          test -n "$SIGNING_KEYSTORE_BASE64" && test -n "$SIGNING_STORE_PASSWORD" && test -n "$SIGNING_KEY_ALIAS" && test -n "$SIGNING_KEY_PASSWORD" || { echo "Signing secrets are not configured; no APK released."; exit 1; }
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || { echo "Invalid release version"; exit 1; }
+      - name: Decode keystore in private runner temp directory
+        shell: bash
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.COWATCH_SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          umask 077
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/cowatch-release-keystore.jks"
+      - name: Build signed APK
+        shell: bash
+        env:
+          COWATCH_KEYSTORE_PASSWORD: ${{ secrets.COWATCH_SIGNING_STORE_PASSWORD }}
+          COWATCH_KEY_ALIAS: ${{ secrets.COWATCH_SIGNING_KEY_ALIAS }}
+          COWATCH_KEY_PASSWORD: ${{ secrets.COWATCH_SIGNING_KEY_PASSWORD }}
+          COWATCH_VERSION_NAME: ${{ inputs.version }}
+          COWATCH_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          export COWATCH_KEYSTORE_PATH="$RUNNER_TEMP/cowatch-release-keystore.jks"
+          gradle -p android :app:assembleRelease --no-daemon --console plain
+          cp android/app/build/outputs/apk/release/app-release.apk "CoWatch-${COWATCH_VERSION_NAME}.apk"
+      - name: Verify release APK signature
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -r | head -n 1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "CoWatch-${RELEASE_VERSION}.apk"
+      - name: Publish signed release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "android-v${RELEASE_VERSION}" "CoWatch-${RELEASE_VERSION}.apk" \
+            --title "共映 CoWatch Android v${RELEASE_VERSION}" \
+            --notes "安卓独立签名测试发行版。需要联网，使用自带 API 密钥。视频分析、收藏和字幕翻译能力因设备、模型及平台而异。安装及数据说明见仓库 README 和 docs/ANDROID_RELEASE.md。首次从调试签名版升级，需备份数据后卸载旧版；同签名正式版后续可覆盖更新。" \
+            --prerelease --target "${{ github.sha }}"
+      - name: Destroy temporary keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/cowatch-release-keystore.jks"
