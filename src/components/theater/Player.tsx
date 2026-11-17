@@ -167,7 +167,7 @@ export function Player() {
               }
               if (resume.playing) void video.play().catch(()=>undefined);
             }
-          }
+          }}
           onDurationChange={(e) => {
             const d = e.currentTarget.duration;
             if (Number.isFinite(d) && d > 0) { useApp.getState().setDuration(d); setDuration(d); }
