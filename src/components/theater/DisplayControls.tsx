@@ -28,6 +28,16 @@ export function DisplayControls({ inDrawer = false }: { inDrawer?: boolean } = {
           <summary className="cursor-pointer font-semibold"><SlidersHorizontal className="mr-1 inline size-4" /> 显示设置（展开调整）</summary>
           <div className="mt-3 space-y-4">
             <RangeField
+              label="弹幕时间校准（负数提前，正数延后）"
+              value={d.timeOffset ?? 0}
+              min={-10}
+              max={10}
+              step={0.5}
+              format={(v) => v === 0 ? "同步" : `${v > 0 ? "延后" : "提前"} ${Math.abs(v).toFixed(1)}s`}
+              onChange={(timeOffset) => update("display", { timeOffset })}
+              hint="只改变播放显示时刻，不修改或重新生成弹幕；可在观看时随时调整。"
+            />
+            <RangeField
               label="滚动速度（穿屏秒数，越小越快）"
               value={d.crossSeconds}
               min={4}
