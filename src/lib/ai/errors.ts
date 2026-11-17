@@ -1,5 +1,5 @@
 export class AiError extends Error {
-  status?: number;
+  status: number | undefined;
   retryable: boolean;
   constructor(message: string, opts: { status?: number; retryable?: boolean } = {}) {
     super(message);
