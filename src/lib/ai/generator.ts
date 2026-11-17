@@ -1,6 +1,7 @@
 import { useApp, useSecrets } from "../store";
 import { getClock } from "../clock";
 import { FrameExtractor, frameTimesFor, CorsTaintedError } from "../frames";
+import { localAudioClues, clearLocalAudioCache } from "./local-audio";
 import { cuesInRange } from "../subtitles";
 import { segmentCount } from "../danmaku-engine";
 import { GEMINI_INLINE_VIDEO_MAX_BYTES } from "../constants";
@@ -141,6 +142,19 @@ async function runSegment(seg: Segment, signal: AbortSignal) {
     .danmaku.filter((d) => !d.demo && d.time < seg.start)
     .slice(-settings.audience.memorySize);
 
+  // Local-only analysis enriches the existing request, never sends extra
+  // image or audio payloads or makes additional API calls.
+  const visual = images.filter((frame) => frame.visualChange !== undefined)
+    .map((frame) => frame.time.toFixed(1) + "s:" + frame.visualChange + "%").join("、");
+  const visualClue = visual
+    ? "截图间像素差异（数值越高，画面变化越大；不代表实际运动速度）：" + visual
+    : "";
+  let audioClue: string | null = null;
+  if (!material.useVideo && source.kind === "file" && source.file && source.file.size <= 20 * 1024 * 1024) {
+    // Fail open: inability to decode audio must never block video generation.
+    audioClue = await localAudioClues(source.file, seg.start, seg.end).catch(() => null);
+  }
+  const localClues = [visualClue, audioClue].filter(Boolean).join("\n").slice(0, 480);
   const system = buildSystemPrompt(settings.audience, noSpoiler, source.label, segCues);
   const userText = buildSegmentText({
     start: seg.start,
@@ -151,6 +165,7 @@ async function runSegment(seg: Segment, signal: AbortSignal) {
     memory,
     globalContext,
     hasVideoClip: !!video,
+    localClues,
     title: source.label,
   });
 
@@ -311,6 +326,7 @@ export function cancelGeneration() {
 
 export function resetVideoCache() {
   videoCache = null;
+  clearLocalAudioCache();
 }
 
 export async function regenerateSegment(index: number) {
