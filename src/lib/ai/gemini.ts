@@ -20,6 +20,7 @@ export async function geminiGenerate(opts: {
   images: { dataUrl: string }[];
   video?: { mimeType: string; base64: string; start: number; end: number } | undefined;
   signal?: AbortSignal | undefined;
+  responseSchema?: unknown;
 }): Promise<ChatResult> {
   const parts: Part[] = [];
   if (opts.video) {
@@ -45,7 +46,7 @@ export async function geminiGenerate(opts: {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: opts.system }] },
         contents: [{ role: "user", parts }],
-        generationConfig: { responseMimeType: "application/json", responseSchema: GEMINI_RESPONSE_SCHEMA },
+        generationConfig: { responseMimeType: "application/json", responseSchema: opts.responseSchema ?? GEMINI_RESPONSE_SCHEMA },
       }),
       signal: opts.signal ?? null,
       credentials: "omit",
