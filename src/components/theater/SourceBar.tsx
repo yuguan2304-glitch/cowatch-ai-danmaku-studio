@@ -11,7 +11,7 @@ import { checkBaseUrl } from "@/lib/video-url";
 import { TRANSCRIBE_MAX_BYTES } from "@/lib/constants";
 import { isAbort } from "@/lib/ai/errors";
 
-export function SourceBar() {
+export function SourceBar({ toolsOnly = false }: { toolsOnly?: boolean } = {}) {
   const source = useApp((s) => s.source);
   const cues = useApp((s) => s.cues);
   const cueLabel = useApp((s) => s.cueLabel);
@@ -55,8 +55,8 @@ export function SourceBar() {
   };
 
   return (
-    <div className="panel space-y-3 p-3">
-      <div className="flex flex-col gap-2 sm:flex-row">
+    <div className={toolsOnly ? "space-y-3" : "panel space-y-3 p-3"}>
+      {!toolsOnly && <div className="flex flex-col gap-2 sm:flex-row">
         <Button variant="marquee" onClick={() => fileRef.current?.click()} className="shrink-0">
           <FileVideo /> 本地视频
         </Button>
@@ -96,9 +96,9 @@ export function SourceBar() {
             打开
           </Button>
         </form>
-      </div>
+      </div>}
 
-      <div className="flex flex-wrap items-center gap-2 text-xs">
+      {toolsOnly && <div className="flex flex-wrap items-center gap-2 text-xs">
         <Button size="sm" variant="outline" onClick={() => subRef.current?.click()}>
           <Captions /> 导入字幕 SRT/VTT
         </Button>
@@ -148,8 +148,8 @@ export function SourceBar() {
             正在放映：{source.label}
           </span>
         )}
-      </div>
-      {source.note && <Notice tone="warn">{source.note}</Notice>}
+      </div>}
+      {source.note && !toolsOnly && <Notice tone="warn">{source.note}</Notice>}
     </div>
   );
 }

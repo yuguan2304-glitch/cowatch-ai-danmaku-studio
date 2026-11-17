@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Menu, Settings2, X } from "lucide-react";
+import { Settings2, X } from "lucide-react";
 import { toast } from "sonner";
 import { SourceBar } from "@/components/theater/SourceBar";
 import { Player } from "@/components/theater/Player";
@@ -32,6 +32,7 @@ export function Index() {
   const setRememberKey = useSecrets(x => x.setRememberKey);
   const clearKeys = useSecrets(x => x.clearKeys);
   const [settingsOpen,setSettingsOpen] = useState(false);
+  useEffect(() => { const open=()=>setSettingsOpen(true); window.addEventListener("cowatch:open-settings",open); return ()=>window.removeEventListener("cowatch:open-settings",open); }, []);
   useEffect(() => { if (!settingsOpen) return; const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSettingsOpen(false); }; window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); }, [settingsOpen]);
   const [testing,setTesting] = useState(false);
   const [testResult,setTestResult] = useState("");
@@ -52,18 +53,25 @@ export function Index() {
     catch(e){const message=e instanceof Error?e.message:String(e);setTestResult(message);toast.error("测试失败，请查看下方错误详情");}finally{setTesting(false);}
   };
   return <main className="mx-auto max-w-[1440px] space-y-4 p-3 sm:p-6">
-    <div className="flex flex-wrap items-center justify-between gap-2"><div><h1 className="font-display text-2xl font-bold">AI 弹幕放映室</h1><p className="text-sm text-muted-foreground">选一部视频，邀请你的虚拟观众。所有 AI 弹幕均为模拟内容。</p></div><div className="flex items-center gap-2"><Button variant="secondary" onClick={()=>setSettingsOpen(true)}><Menu className="size-4"/> 设置</Button><Button variant="outline" onClick={()=>navigator.clipboard.writeText(location.origin).then(()=>toast.success("已复制链接"),()=>toast.error("复制失败"))}>分享网站</Button></div></div>
+    <div><h1 className="font-display text-2xl font-bold">AI 弹幕放映室</h1><p className="text-sm text-muted-foreground">选一部视频，邀请你的虚拟观众。所有 AI 弹幕均为模拟内容。</p></div>
     <div className="space-y-4">
-      <div className="min-w-0 space-y-3"><SourceBar/><Player/><DisplayControls/><GenerationPanel/><CommentSection/><TranslationPanel/>
-        <details className="panel group space-y-2 p-3"><summary className="cursor-pointer list-item font-bold">💬 弹幕列表 · {s.danmaku.length} 条</summary>
-          <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={()=>downloadText("cowatch.json",toJsonExport(s.source.label,s.danmaku,s.demo),"application/json")}>导出 JSON</Button><Button size="sm" variant="outline" onClick={()=>downloadText("cowatch.xml",toBiliXml(s.danmaku),"application/xml")}>导出 XML</Button><label className="text-sm">导入弹幕 <input type="file" accept=".json,.xml" disabled={s.generating} onChange={async e=>{const f=e.target.files?.[0];if(!f)return;try{if(s.danmaku.length&&!confirm("替换当前弹幕？"))return;const raw=await f.text();const result=f.name.endsWith(".xml")?{danmaku:fromBiliXml(raw),demo:false}:fromJsonImport(raw);s.setDanmaku(result.danmaku,result.demo);s.setSegments([]);}catch(err){toast.error((err as Error).message);}finally{e.target.value="";}}}/></label></div>
-          <div className="max-h-72 overflow-auto space-y-1">{s.danmaku.map(d=><div key={d.id} className="flex items-center gap-2 text-sm"><button className="shrink-0 text-primary" onClick={()=>getClock()?.seek(d.time)}>{formatTime(d.time)}</button><span className="shrink-0 text-xs text-muted-foreground">{d.viewer}</span><Input aria-label="编辑弹幕" value={d.text} disabled={s.generating} onChange={e=>s.updateDanmaku(d.id,{text:e.target.value})}/><Button size="sm" variant="ghost" disabled={s.generating} onClick={()=>s.removeDanmaku(d.id)}>删除</Button></div>)}</div>
-        </details>
+      <div className="min-w-0 space-y-3"><SourceBar/><Player/><CommentSection/>
       </div>
       {settingsOpen && <div className="fixed inset-0 z-[150] bg-black/65" onClick={()=>setSettingsOpen(false)} aria-hidden="true"/>}
       <aside role="dialog" aria-modal={settingsOpen} aria-label="共映设置侧栏" aria-hidden={!settingsOpen} className={["fixed right-0 top-0 z-[160] flex h-[100dvh] w-[min(92vw,440px)] flex-col border-l border-border bg-background shadow-2xl transition-transform duration-200",settingsOpen?"translate-x-0":"translate-x-full pointer-events-none"].join(" ")}>
         <div className="flex shrink-0 items-center justify-between border-b border-border p-4"><h2 className="flex items-center gap-2 font-bold"><Settings2 className="size-5"/> 共映设置</h2><Button size="sm" variant="ghost" aria-label="关闭设置侧栏" onClick={()=>setSettingsOpen(false)}><X className="size-5"/></Button></div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-10"><fieldset disabled={s.generating} className="min-w-0 space-y-3">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 pb-10">
+          <div className="flex justify-end"><Button variant="outline" size="sm" onClick={()=>navigator.clipboard.writeText(location.origin).then(()=>toast.success("已复制链接"),()=>toast.error("复制失败"))}>分享网站</Button></div>
+          <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🎬 视频辅助工具</summary><SourceBar toolsOnly/></details>
+          <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🎛️ 弹幕显示</summary><DisplayControls/></details>
+          <GenerationPanel/>
+          <TranslationPanel/>
+                  <details className="panel group space-y-2 p-3"><summary className="cursor-pointer list-item font-bold">💬 弹幕列表 · {s.danmaku.length} 条</summary>
+          <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={()=>downloadText("cowatch.json",toJsonExport(s.source.label,s.danmaku,s.demo),"application/json")}>导出 JSON</Button><Button size="sm" variant="outline" onClick={()=>downloadText("cowatch.xml",toBiliXml(s.danmaku),"application/xml")}>导出 XML</Button><label className="text-sm">导入弹幕 <input type="file" accept=".json,.xml" disabled={s.generating} onChange={async e=>{const f=e.target.files?.[0];if(!f)return;try{if(s.danmaku.length&&!confirm("替换当前弹幕？"))return;const raw=await f.text();const result=f.name.endsWith(".xml")?{danmaku:fromBiliXml(raw),demo:false}:fromJsonImport(raw);s.setDanmaku(result.danmaku,result.demo);s.setSegments([]);}catch(err){toast.error((err as Error).message);}finally{e.target.value="";}}}/></label></div>
+          <div className="max-h-72 overflow-auto space-y-1">{s.danmaku.map(d=><div key={d.id} className="flex items-center gap-2 text-sm"><button className="shrink-0 text-primary" onClick={()=>getClock()?.seek(d.time)}>{formatTime(d.time)}</button><span className="shrink-0 text-xs text-muted-foreground">{d.viewer}</span><Input aria-label="编辑弹幕" value={d.text} disabled={s.generating} onChange={e=>s.updateDanmaku(d.id,{text:e.target.value})}/><Button size="sm" variant="ghost" disabled={s.generating} onClick={()=>s.removeDanmaku(d.id)}>删除</Button></div>)}</div>
+        </details>
+
+          <fieldset disabled={s.generating} className="min-w-0 space-y-3">
         <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🔑 AI 接口设置</summary><p className="text-xs text-muted-foreground">使用你自己的 API 额度。默认每次刷新后清除密钥与中转站地址；只有明确勾选「记住」才保存在本设备。内容仅发送至所选服务商。</p><p className="truncate text-xs text-muted-foreground" title={p.model}>当前模型：{p.model || "未选择"}</p>
           <div className="flex flex-wrap gap-1">{PROVIDER_PRESETS.map(x=><Button key={x.label} size="sm" variant="outline" onClick={()=>{setKey("");s.update("provider",{kind:x.kind,baseUrl:x.baseUrl,model:x.model});}}>{x.label}</Button>)}</div>
           <label className="block text-sm">接口类型 <select className="w-full rounded border bg-background p-2" value={p.kind} onChange={e=>{setKey("");s.update("provider",{kind:e.target.value==="gemini"?"gemini":"openai"});}}><option value="openai">OpenAI 兼容</option><option value="gemini">Gemini 原生</option></select></label>
