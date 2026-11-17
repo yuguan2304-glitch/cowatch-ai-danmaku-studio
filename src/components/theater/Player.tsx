@@ -23,7 +23,7 @@ export function Player() {
   const [muted, setMuted] = useState(false);
   const [brightness, setBrightness] = useState(1);
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
-  const touchStart = useRef<{ x: number; y: number; v: number; b: number; brightnessSide: boolean; changed: boolean } | null>(null);
+  const touchStart = useRef<{ x: number; y: number; v: number; b: number; startTime: number; brightnessSide: boolean; mode: "pending" | "vertical" | "seek"; changed: boolean } | null>(null);
   const seekingRef = useRef(false);
   const lastTapRef = useRef(0);
   const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -318,14 +318,16 @@ export function Player() {
       )}
 
       {isHtmlVideo && <div
-        aria-label="播放画面：左侧上下滑调亮度，右侧上下滑调音量"
+        aria-label="播放画面：左右滑动快进快退，左侧上下滑调亮度，右侧上下滑调音量，双击播放或暂停"
         onPointerDown={(e) => {
           if (e.pointerType === "mouse") return;
           const localX = e.nativeEvent.offsetX;
           touchStart.current = {
             x: e.clientX, y: e.clientY,
             v: videoRef.current?.volume ?? 1, b: brightness,
+            startTime: videoRef.current?.currentTime ?? 0,
             brightnessSide: localX < e.currentTarget.clientWidth / 2,
+            mode: "pending",
             changed: false,
           };
           e.currentTarget.setPointerCapture(e.pointerId);
@@ -334,11 +336,31 @@ export function Player() {
           const g = touchStart.current;
           if (!g || e.pointerType === "mouse") return;
           const rotated = fauxFullscreen && portrait;
-          const deltaPx = rotated ? e.clientX - g.x : g.y - e.clientY;
-          const sideways = rotated ? Math.abs(e.clientY - g.y) : Math.abs(e.clientX - g.x);
-          if (!g.changed && (Math.abs(deltaPx) < 12 || sideways > Math.abs(deltaPx) * 1.4)) return;
-          g.changed = true;
-          const delta = deltaPx / Math.max(150, e.currentTarget.clientHeight);
+          // In the portrait fallback, the entire player is CSS-rotated 90°.
+          // Visual horizontal movement is therefore screen Y, not screen X.
+          const dx = rotated ? e.clientY - g.y : e.clientX - g.x;
+          const dy = rotated ? e.clientX - g.x : g.y - e.clientY;
+          if (g.mode === "pending") {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) < 12) return;
+            g.mode = Math.abs(dx) > Math.abs(dy) * 1.2 ? "seek" : "vertical";
+            g.changed = true;
+            if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+            singleTapTimerRef.current = null;
+            lastTapRef.current = 0;
+          }
+          if (g.mode === "seek") {
+            const video = videoRef.current;
+            if (!video || !Number.isFinite(video.duration) || video.duration <= 0) {
+              setGestureHint("此视频暂不支持拖动跳转");
+              return;
+            }
+            const span = Math.max(150, e.currentTarget.clientWidth);
+            const target = Math.max(0, Math.min(video.duration, g.startTime + (dx / span) * video.duration));
+            setSeekPreview(target);
+            setGestureHint((dx >= 0 ? "快进 " : "快退 ") + fmt(Math.abs(target - g.startTime)) + " · " + fmt(target) + " / " + fmt(video.duration));
+            return;
+          }
+          const delta = dy / Math.max(150, e.currentTarget.clientHeight);
           if (g.brightnessSide) {
             const next = Math.max(0.15, Math.min(1, g.b + delta));
             setBrightness(next);
@@ -353,10 +375,21 @@ export function Player() {
         onPointerUp={(e) => {
           const g = touchStart.current;
           touchStart.current = null;
+          if (g?.mode === "seek") {
+            const v = videoRef.current;
+            if (v && Number.isFinite(v.duration) && v.duration > 0) {
+              const rotated = fauxFullscreen && portrait;
+              const dx = rotated ? e.clientY - g.y : e.clientX - g.x;
+              const target = Math.max(0, Math.min(v.duration, g.startTime + (dx / Math.max(150, e.currentTarget.clientWidth)) * v.duration));
+              v.currentTime = target;
+              setCurrentTime(target);
+            }
+            setSeekPreview(null);
+          }
           setGestureHint("");
           if (g && !g.changed) handleStageTap();
         }}
-        onPointerCancel={() => { touchStart.current = null; setGestureHint(""); }}
+        onPointerCancel={() => { touchStart.current = null; setSeekPreview(null); setGestureHint(""); }}
         onClick={(e) => { if ((e.nativeEvent as PointerEvent).pointerType === "mouse") handleStageTap(); }}
         className="absolute inset-0 z-30 h-full w-full cursor-default bg-transparent"
         style={{ touchAction: "none" }}
