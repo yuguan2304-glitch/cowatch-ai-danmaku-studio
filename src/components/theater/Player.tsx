@@ -72,13 +72,13 @@ export function Player() {
   // Real video players hide their controls while playing. Any tap on empty
   // video space toggles them; clicks on buttons and the seek bar are ignored.
   useEffect(() => {
-    if (!controlsVisible || !playing || !fauxFullscreen) return;
+    if (!controlsVisible || !playing || !isHtmlVideo) return;
     const timeout = window.setTimeout(() => setControlsVisible(false), 3200);
     return () => window.clearTimeout(timeout);
-  }, [controlsVisible, playing, fauxFullscreen]);
+  }, [controlsVisible, playing, isHtmlVideo]);
 
   const toggleControlsOnStage = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isHtmlVideo || !fauxFullscreen) return;
+    if (!isHtmlVideo) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.closest("button, input, a, select, textarea, label, [data-player-control]")) return;
@@ -225,7 +225,7 @@ export function Player() {
             if (Number.isFinite(d) && d > 0) { useApp.getState().setDuration(d); setDuration(d); }
           }}
           onError={onVideoError}
-          onPlay={() => { setPlaying(true); if (fauxFullscreen) setControlsVisible(true); }}
+          onPlay={() => { setPlaying(true); setControlsVisible(true); }}
           onPause={() => setPlaying(false)}
           onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
           onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
@@ -279,7 +279,7 @@ export function Player() {
         </div>
       )}
 
-      {isHtmlVideo && <div data-player-control aria-hidden={fauxFullscreen && !controlsVisible} className={["absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-2 pt-8 text-white transition-opacity duration-200", fauxFullscreen && !controlsVisible ? "pointer-events-none opacity-0" : "opacity-100"].join(" ")}>
+      {isHtmlVideo && <div data-player-control aria-hidden={!controlsVisible} className={["absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-2 pt-8 text-white transition-opacity duration-200", !controlsVisible ? "pointer-events-none opacity-0" : "opacity-100"].join(" ")}>
         <input type="range" aria-label="视频进度" className="mb-2 w-full accent-amber-400" min={0} max={Math.max(1,duration)} step={0.1} value={Math.min(currentTime,Math.max(1,duration))} onChange={e=>{const v=videoRef.current;if(v){v.currentTime=Number(e.target.value);setCurrentTime(v.currentTime);}}}/>
         <div className="flex items-center gap-2">
           <button type="button" className="rounded bg-black/40 p-2" aria-label={playing?"暂停":"播放"} onClick={togglePlayback}>{playing?<Pause className="size-5"/>:<Play className="size-5"/>}</button>
