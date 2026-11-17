@@ -103,6 +103,7 @@ export function defaultSettings(): Settings {
     display: {
       enabled: true,
       crossSeconds: 8,
+      timeOffset: 0,
       fontSize: 24,
       opacity: 0.9,
       displayDensity: 1,
