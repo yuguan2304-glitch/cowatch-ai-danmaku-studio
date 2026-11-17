@@ -22,6 +22,14 @@ function App() {
   );
 }
 
+// Register only in production; the service worker caches application files,
+// never user's videos, API requests or third-party resources.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  });
+}
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
