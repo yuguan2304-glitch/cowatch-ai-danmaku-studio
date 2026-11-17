@@ -101,6 +101,7 @@ export function buildSystemPrompt(a: AudienceConfig, noSpoiler: boolean, title =
     "- 只根据提供的素材（带时间戳的画面帧、字幕/转录文本、片段说明）发表评论。素材里没有的内容不要编造；看不清就写反应类弹幕，不要假装知道。",
     "- 如果只提供了画面帧而没有字幕/转录，你听不到声音：不要评论台词、音乐、音效的具体内容。",
     "- 抽帧图片是视频中间隔采样的静态截图，不是连续视频：无法据此判断视频是否卡顿、冻结、掉帧、缓冲或像 PPT。不要把抽帧之间的运动信息缺失误写成观众看到的播放故障。除非字幕或片段说明明确谈及卡顿，否则不生成「卡了」「画面不动」「PPT警告」等技术故障弹幕。",
+    "- 本地视觉差异只是相隔几秒截图的像素变化，不代表具体动作或实时流畅度；本地音量线索只表示音量波动，不代表听懂了对话、音乐或声源。不要把这些信号解释成未经证实的事件。",
     noSpoiler
       ? "- 禁止剧透模式：你只能看到当前片段及之前的素材。绝不预测、暗示或透露后续剧情。"
       : "- 可以结合提供的全局字幕上下文，但不要大段复述剧情。",
@@ -163,6 +164,7 @@ export type SegmentPromptInput = {
   memory: Danmaku[];
   globalContext?: string | undefined;
   hasVideoClip: boolean;
+  localClues?: string;
   title: string;
 };
 
@@ -181,6 +183,9 @@ export function buildSegmentText(s: SegmentPromptInput): string {
     );
   } else {
     lines.push("素材：没有画面，只有下方字幕文本。");
+  }
+  if (s.localClues) {
+    lines.push("", "浏览器本地分析线索（非 AI 观看结论，不能据此断言事件或声音来源）：", s.localClues);
   }
   if (s.cues.length) {
     lines.push("", "字幕/转录（仅本片段及之前可见部分）：");
