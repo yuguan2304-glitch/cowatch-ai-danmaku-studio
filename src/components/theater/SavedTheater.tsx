@@ -67,6 +67,7 @@ export function SavedTheater() {
     try {
       const now = Date.now();
       const current = useApp.getState();
+      const cover = await makeCover();
       const rec: SavedScreening = {
         id: existing?.id ?? crypto.randomUUID(),
         title,
@@ -78,7 +79,7 @@ export function SavedTheater() {
         ...(source.kind !== "file" ? { sourceUrl: source.kind === "youtube"
           ? "https://www.youtube.com/watch?v=" + source.youtubeId
           : source.kind === "bilibili" ? source.label : source.src } : {}),
-        ...(await makeCover() ? { thumbnail: await makeCover() } : existing?.thumbnail ? { thumbnail: existing.thumbnail } : {}),
+        ...(cover ? { thumbnail: cover } : existing?.thumbnail ? { thumbnail: existing.thumbnail } : {}),
         duration: current.duration,
         danmaku: [...current.danmaku],
         demo: current.demo,
