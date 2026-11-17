@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { getClock } from "@/lib/clock";
 import type { Cue } from "@/lib/types";
 import { Input } from "@/components/ui/input";
+import { ModelPicker } from "@/components/theater/ModelPicker";
 import { useSubtitleDisplay } from "@/lib/subtitle-display";
 import { transcribe } from "@/lib/ai/openai";
 import { TRANSCRIBE_MAX_BYTES } from "@/lib/constants";
@@ -101,7 +102,7 @@ export function TranslationPanel(){
    </div>
    <p className="font-semibold text-sm">② 选择翻译方式</p>
    <label className="block text-sm">翻译服务<select className="w-full rounded border bg-background p-2" disabled={busy} value={service} onChange={e=>{setTranslationKey("");setService(e.target.value as typeof service);}}><option value="custom">独立 OpenAI 兼容 API</option><option value="google">Google Cloud Translation</option><option value="shared">复用弹幕 AI 接口</option></select></label>
- {service==="custom"&&<><label className="block text-sm">翻译 API 地址<Input disabled={busy} value={translationUrl} onChange={e=>{setTranslationKey("");setTranslationUrl(e.target.value);}}/></label><label className="block text-sm">翻译模型<Input disabled={busy} value={translationModel} onChange={e=>setTranslationModel(e.target.value)}/></label></>}
+ {service==="custom"&&<><label className="block text-sm">翻译 API 地址<Input disabled={busy} value={translationUrl} onChange={e=>{setTranslationKey("");setTranslationUrl(e.target.value);}}/></label><div className={busy?"pointer-events-none opacity-50":""}><ModelPicker kind="openai" baseUrl={translationUrl} apiKey={translationKey} model={translationModel} onModelChange={setTranslationModel}/></div></>}
  {service!=="shared"&&<label className="block text-sm">独立翻译 API 密钥<Input type="password" autoComplete="off" disabled={busy} value={translationKey} onChange={e=>setTranslationKey(e.target.value)}/></label>}
  {service==="google"&&<p className="text-xs text-muted-foreground">需启用 Google Cloud Translation Basic API（可能收费）；本模式不使用自定义术语表。</p>}
  <label className="block text-sm">目标语言 <select className="w-full rounded border bg-background p-2" disabled={busy} value={target} onChange={e=>setTarget(e.target.value)}>{["简体中文","繁體中文","English","日本語","한국어","Español","Français"].map(x=><option key={x}>{x}</option>)}</select></label>
