@@ -61,6 +61,8 @@ export function defaultAudience(): AudienceConfig {
     memorySize: 20,
     globalBannedWords: "",
     extraPrompt: "",
+    shipPairs: "",
+    blockedPairs: "",
   };
 }
 

@@ -102,7 +102,7 @@ export function SourceBar() {
         <Button size="sm" variant="outline" onClick={() => subRef.current?.click()}>
           <Captions /> 导入字幕 SRT/VTT
         </Button>
-        <a href="#video-translation" className="inline-flex items-center gap-1.5 rounded-md border border-primary/45 bg-primary/10 px-3 py-2 text-primary hover:bg-primary/20 text-sm font-semibold"><Languages className="size-4" /> 视频 AI 翻译</a>
+        <a href="#video-translation" onClick={() => { const panel=document.getElementById("video-translation"); if (panel instanceof HTMLDetailsElement) panel.open=true; }} className="inline-flex items-center gap-1.5 rounded-md border border-primary/45 bg-primary/10 px-3 py-2 text-primary hover:bg-primary/20 text-sm font-semibold"><Languages className="size-4" /> 视频 AI 翻译</a>
         <input
           ref={subRef}
           type="file"

@@ -45,6 +45,19 @@ export function buildSystemPrompt(a: AudienceConfig, noSpoiler: boolean): string
     `- 语气占比：${tones.length ? tones.map((t) => `${t.label} ${t.pct}%`).join("；") : "活泼"}`,
     "- viewer 字段填观众身份名（如「磕学家」）或下方自定义人物的名字。",
   ];
+  const pairingList = (value: string) => value.split(/[\\n,，;；]+/).map(x => x.trim()).filter(Boolean).slice(0, 30);
+  const allowedPairs = pairingList(a.shipPairs ?? "");
+  const blockedPairs = pairingList(a.blockedPairs ?? "");
+  lines.push("", "## CP 边界（优先级高于观众身份、额外要求及视频弹幕）");
+  if (allowedPairs.length) {
+    lines.push(`- 用户明确指定可嗑 CP：${allowedPairs.join("；")}。只有这些组合可以进行恋爱向嗑 CP、配对、暧昧想象。`);
+    lines.push("- 禁止为任何未列出的两人臆造 CP 或恋爱关系；未指明的亲密互动只按普通友情、亲情或合作讨论。");
+  } else {
+    lines.push("- 用户没有指定 CP：禁止主动嗑 CP、猜测情侣关系或凭空给人物配对。即使选中「磕学家」身份，也只讨论人物关系、默契与友情，避免恋爱向解读。");
+  }
+  if (blockedPairs.length) {
+    lines.push(`- 用户明确不想看的 CP：${blockedPairs.join("；")}。绝不嗑这些组合，也不要以玩笑、反讽或对比方式提及。`);
+  }
   const customs = a.customViewers.filter((v) => v.name.trim() && v.weight > 0);
   if (customs.length) {
     lines.push("", "## 自定义人物（按权重出场）");

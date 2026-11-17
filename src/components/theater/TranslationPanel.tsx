@@ -71,7 +71,7 @@ export function TranslationPanel(){
    }catch(e){if(!ctrl.signal.aborted)toast.error((e as Error).message);}finally{setBusy(false);if(abort.current===ctrl)abort.current=null;}
  };
  const exportSrt=()=>{const rows=cues.map((c:Cue,i)=>[i+1,stamp(c.start)+" --> "+stamp(c.end),mode==="original"?c.text:mode==="both"?[c.text,translated[i]].filter(Boolean).join("\n"):translated[i]??c.text].join("\n"));downloadText("cowatch-subtitles.srt",rows.join("\n\n"),"text/plain");};
- return <section id="video-translation" className="panel scroll-mt-16 space-y-3 p-3"><h2 className="font-bold">🎞️ 视频 AI 字幕翻译</h2><p className="text-xs text-muted-foreground">视频翻译分三步：① 导入 SRT/VTT 字幕，或在上方「音轨转录」获取带时间戳的字幕（目前限 25MB 本地文件且转录接口需支持时间戳）；② 选择翻译服务并翻译字幕；③ 在视频画面内显示原文 / 译文 / 双语，横屏全屏时也会保留。字幕翻译与弹幕生成分开计费，译文优先使用本地缓存。</p>
+ return <details id="video-translation" className="panel scroll-mt-16 space-y-3 p-3"><summary className="cursor-pointer font-bold">🎞️ 视频 AI 字幕翻译 · {cues.length} 段字幕（点击展开）</summary><p className="text-xs text-muted-foreground">视频翻译分三步：① 导入 SRT/VTT 字幕，或在上方「音轨转录」获取带时间戳的字幕（目前限 25MB 本地文件且转录接口需支持时间戳）；② 选择翻译服务并翻译字幕；③ 在视频画面内显示原文 / 译文 / 双语，横屏全屏时也会保留。字幕翻译与弹幕生成分开计费，译文优先使用本地缓存。</p>
  <label className="block text-sm">翻译服务<select className="w-full rounded border bg-background p-2" disabled={busy} value={service} onChange={e=>{setTranslationKey("");setService(e.target.value as typeof service);}}><option value="custom">独立 OpenAI 兼容 API</option><option value="google">Google Cloud Translation</option><option value="shared">复用弹幕 AI 接口</option></select></label>
  {service==="custom"&&<><label className="block text-sm">翻译 API 地址<Input disabled={busy} value={translationUrl} onChange={e=>{setTranslationKey("");setTranslationUrl(e.target.value);}}/></label><label className="block text-sm">翻译模型<Input disabled={busy} value={translationModel} onChange={e=>setTranslationModel(e.target.value)}/></label></>}
  {service!=="shared"&&<label className="block text-sm">独立翻译 API 密钥<Input type="password" autoComplete="off" disabled={busy} value={translationKey} onChange={e=>setTranslationKey(e.target.value)}/></label>}
@@ -85,5 +85,5 @@ export function TranslationPanel(){
  {mode!=="off"&&<div className="min-h-14 rounded bg-black p-2 text-center text-white">{active>=0&&<>{mode!=="translated"&&<div>{cues[active]?.text}</div>}{mode!=="original"&&<div>{translated[active]??(mode==="translated"?cues[active]?.text:"")}</div>}</>}</div>}
  <details><summary className="text-sm">字幕译文编辑 · {Object.keys(translated).length}/{cues.length}</summary><div className="max-h-64 space-y-2 overflow-auto">{cues.map((c,i)=><label key={i} className="block text-xs">{c.text}<Textarea value={translated[i]??""} disabled={busy} onChange={e=>{writeCache(cacheId("cues",c.text),e.target.value);mergeTranslated({[i]:e.target.value});}}/></label>)}</div></details>
  <details><summary className="text-sm">弹幕译文 · {Object.keys(commentTranslations).length}/{comments.length}</summary><div className="max-h-64 overflow-auto">{comments.filter(c=>commentTranslations[c.id]).map(c=><p key={c.id} className="border-b py-1 text-sm">{c.text} → {commentTranslations[c.id]}</p>)}</div></details>
- </section>;
+ </details>;
 }
