@@ -16,10 +16,12 @@ export async function transcribeVideoWithAudioChunks(opts: {
   apiKey: string;
   model: string;
   signal: AbortSignal;
+  maxSeconds?: number;
   onProgress?: (message: string) => void;
 }): Promise<{ cues: Cue[]; timestamped: boolean; audioOnly: boolean }> {
   const { file, signal, onProgress } = opts;
-  if (file.size <= TRANSCRIBE_MAX_BYTES) {
+  // A short paid test always extracts only the first sample; it must never upload the full video.
+  if (opts.maxSeconds === undefined && file.size <= TRANSCRIBE_MAX_BYTES) {
     onProgress?.("正在将短视频送往转录接口…");
     const result = await transcribe(opts);
     return { ...result, audioOnly: false };
@@ -75,9 +77,10 @@ export async function transcribeVideoWithAudioChunks(opts: {
     if (!mime) throw new Error("此 WebView 不支持音频录制格式，请改用 Chrome 或导入字幕");
     await context.resume();
     let start = 0;
-    while (start < video.duration - 0.1) {
+    const endLimit = Math.min(video.duration, opts.maxSeconds ?? video.duration);
+    while (start < endLimit - 0.1) {
       assertNotCancelled();
-      const end = Math.min(video.duration, start + segmentSeconds);
+      const end = Math.min(endLimit, start + segmentSeconds);
       const parts: BlobPart[] = [];
       const current = new MediaRecorder(destination.stream, { mimeType: mime, audioBitsPerSecond: 48000 });
       recorder = current;
