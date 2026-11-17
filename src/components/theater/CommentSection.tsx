@@ -60,7 +60,7 @@ export function CommentSection() {
         subtitles: cues.slice(0, 80).map(c => ({time:c.start,text:c.text})),
       });
       const result = p.kind === "gemini" ?
-        await geminiGenerate({ baseUrl:p.baseUrl, apiKey, model:p.model, system, userText:user, images:[] }) :
+        await geminiGenerate({ baseUrl:p.baseUrl, apiKey, model:p.model, system, userText:user, images:[], responseSchema: { type: "OBJECT", properties: { comments: { type: "ARRAY", items: { type: "OBJECT", properties: { name: { type: "STRING" }, text: { type: "STRING" }, replyTo: { type: "STRING" } }, required: ["name","text"] } } }, required: ["comments"] } }) :
         await openaiChat({ baseUrl:p.baseUrl, apiKey, model:p.model, system, userText:user, images:[], imageDetail:"low", jsonMode:p.jsonMode });
       const data = extractJson(result.text) as { comments?: RawComment[] };
       if (!Array.isArray(data.comments)) throw new Error("模型未返回评论列表");
