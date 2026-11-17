@@ -219,7 +219,10 @@ export function TranslationPanel(){
      useApp.getState().setCues(result.cues,cloudSample?"云端转录测试（前30秒）":"AI 音轨转录");
      toast.success("提取成功！已得到 "+result.cues.length+" 段字幕。接下来点击「翻译视频字幕」。");
    }catch(e){if(!ctrl.signal.aborted){
-     const message=explainTranscriptionError(e);
+     const raw=e instanceof Error?e.message:String(e);
+     const message=/网络请求失败|Failed to fetch|NetworkError|CORS/i.test(raw)
+       ? "连接失败："+baseUrl+"/audio/transcriptions（模型："+transModel+"）。浏览器跨域限制、接口网络不通或服务商不支持均可能造成此错误。"
+       : "转录失败（"+checked.url.host+" / "+transModel+"）："+raw;
      toast.error(message,{duration:12000});
    }}
    finally{setBusy(false);setTranscriptionProgress("");if(abort.current===ctrl)abort.current=null;}
