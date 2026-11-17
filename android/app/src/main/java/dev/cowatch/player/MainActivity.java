@@ -2,6 +2,8 @@ package dev.cowatch.player;
 
 import android.app.Activity;
 import android.app.DownloadManager;
+import android.content.ContentValues;
+import android.content.ContentResolver;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -10,6 +12,14 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
+import androidx.webkit.WebMessageCompat;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import org.json.JSONObject;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
@@ -31,6 +41,7 @@ public final class MainActivity extends Activity {
     private static final String HOME_URL = "https://cowatch-ai-danmaku-studio.yuguan2304.workers.dev/";
     private static final String TRUSTED_HOST = "cowatch-ai-danmaku-studio.yuguan2304.workers.dev";
     private static final int PICK_FILE = 501;
+    private static final int MAX_EXPORT_CHARS = 6 * 1024 * 1024;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WebView webView;
     private FrameLayout root;
@@ -120,6 +131,38 @@ public final class MainActivity extends Activity {
                 hideCustomVideo();
             }
         });
+        // Only the trusted CoWatch HTTPS origin can invoke the native file exporter.
+        // Unlike addJavascriptInterface, this channel is not exposed to arbitrary iframes.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(webView, "CoWatchExport",
+                Collections.singleton("https://" + TRUSTED_HOST), (view, message, origin, mainFrame, reply) -> {
+                    if (!mainFrame || !"https".equals(origin.getScheme())
+                        || !TRUSTED_HOST.equals(origin.getHost())
+                        || message.getType() != WebMessageCompat.TYPE_STRING) return;
+                    String raw = message.getData();
+                    if (raw == null || raw.length() > MAX_EXPORT_CHARS) {
+                        handler.post(() -> Toast.makeText(this, "导出文件过大", Toast.LENGTH_LONG).show());
+                        return;
+                    }
+                    try {
+                        JSONObject data = new JSONObject(raw);
+                        String name = data.optString("filename", "");
+                        String mime = data.optString("mime", "");
+                        String content = data.optString("content", "");
+                        if (!("cowatch.json".equals(name) || "cowatch.xml".equals(name)
+                                || "cowatch-worldbook.txt".equals(name)
+                                || "cowatch-imported-worldbook.json".equals(name))
+                            || !(mime.startsWith("application/json") || mime.startsWith("application/xml")
+                                || mime.startsWith("text/plain"))) return;
+                        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+                        if (bytes.length > MAX_EXPORT_CHARS) return;
+                        handler.post(() -> saveLocalExport(name, mime, bytes));
+                    } catch (Exception ignored) {
+                        handler.post(() -> Toast.makeText(this, "导出数据解析失败", Toast.LENGTH_SHORT).show());
+                    }
+                });
+        }
+
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
             Uri uri = Uri.parse(url);
             if (!"https".equals(uri.getScheme())) {
@@ -145,6 +188,36 @@ public final class MainActivity extends Activity {
         if (state == null) webView.loadUrl(HOME_URL);
         else webView.restoreState(state);
         handler.postDelayed(detectCinema, 500);
+    }
+
+    // Downloads provider handles scoped storage on Android 10+ without broad permissions.
+    private void saveLocalExport(String name, String mime, byte[] bytes) {
+        if (Build.VERSION.SDK_INT < 29) {
+            Toast.makeText(this, "系统版本较旧，请使用网页版导出", Toast.LENGTH_LONG).show();
+            return;
+        }
+        ContentResolver resolver = getContentResolver();
+        Uri item = null;
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Downloads.DISPLAY_NAME, name);
+            values.put(MediaStore.Downloads.MIME_TYPE, mime);
+            values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/CoWatch");
+            values.put(MediaStore.Downloads.IS_PENDING, 1);
+            item = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (item == null) throw new IllegalStateException("无法创建下载文件");
+            try (OutputStream stream = resolver.openOutputStream(item)) {
+                if (stream == null) throw new IllegalStateException("无法打开下载文件");
+                stream.write(bytes);
+            }
+            ContentValues ready = new ContentValues();
+            ready.put(MediaStore.Downloads.IS_PENDING, 0);
+            resolver.update(item, ready, null, null);
+            Toast.makeText(this, "已保存到 下载/CoWatch/" + name, Toast.LENGTH_LONG).show();
+        } catch (Exception ex) {
+            if (item != null) resolver.delete(item, null, null);
+            Toast.makeText(this, "文件导出失败，请检查存储空间", Toast.LENGTH_LONG).show();
+        }
     }
 
     private void hideCustomVideo() {

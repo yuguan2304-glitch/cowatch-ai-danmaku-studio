@@ -117,6 +117,14 @@ function hashString(s: string): number {
 }
 
 export function downloadText(filename: string, content: string, mime: string) {
+  // Android's DownloadManager cannot retrieve blob: URLs. The signed app
+  // exposes a narrow origin-scoped message channel to save local exports.
+  // Browser users continue to use the normal blob download path.
+  const nativeExport = (window as Window & { CoWatchExport?: { postMessage: (data: string) => void } }).CoWatchExport;
+  if (nativeExport && /^(cowatch\\.json|cowatch\\.xml|cowatch-worldbook\\.txt|cowatch-imported-worldbook\\.json)$/.test(filename)) {
+    nativeExport.postMessage(JSON.stringify({ filename, mime, content }));
+    return;
+  }
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
