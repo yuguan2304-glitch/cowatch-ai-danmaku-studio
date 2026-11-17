@@ -1,0 +1,22 @@
+name: Independent Workers Check
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  independent-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-package-lock --no-audit --no-fund
+      - run: npm run build
+      - run: npx tsc --noEmit
+      - name: Check Workers bundle
+        run: |
+          find dist .output -maxdepth 3 -type f 2>/dev/null | head -35 || true
+          npx wrangler deploy --dry-run
