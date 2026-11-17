@@ -93,7 +93,7 @@ export function TranslationPanel(){
    finally{setBusy(false);if(abort.current===ctrl)abort.current=null;}
  };
  const exportSrt=()=>{const rows=cues.map((c:Cue,i)=>[i+1,stamp(c.start)+" --> "+stamp(c.end),mode==="original"?c.text:mode==="both"?[c.text,translated[i]].filter(Boolean).join("\n"):translated[i]??c.text].join("\n"));downloadText("cowatch-subtitles.srt",rows.join("\n\n"),"text/plain");};
- return <details id="video-translation" className="panel scroll-mt-16 space-y-3 p-3"><summary className="cursor-pointer font-bold">🎞️ 视频 AI 字幕翻译 · {cues.length} 段字幕（点击展开）</summary><p className="text-xs text-muted-foreground">更省事的做法：优先复用已能生成弹幕的 AI 接口翻译字幕，不必再填第二套翻译密钥。没有字幕时，先导入 SRT/VTT，或者尝试从本地短视频转录。转录、翻译可能分别收费。详细流程：① 导入 SRT/VTT 字幕，或在上方「音轨转录」获取带时间戳的字幕（目前限 25MB 本地文件且转录接口需支持时间戳）；② 选择翻译服务并翻译字幕；③ 在视频画面内显示原文 / 译文 / 双语，横屏全屏时也会保留。字幕翻译与弹幕生成分开计费，译文优先使用本地缓存。</p>
+ return <details id="video-translation" className="panel scroll-mt-16 space-y-3 p-3"><summary className="cursor-pointer font-bold">🎞️ 视频 AI 字幕翻译</summary><p className="text-xs text-muted-foreground">更省事的做法：优先复用已能生成弹幕的 AI 接口翻译字幕，不必再填第二套翻译密钥。没有字幕时，先导入 SRT/VTT，或者尝试从本地短视频转录。转录、翻译可能分别收费。详细流程：① 导入 SRT/VTT 字幕，或在上方「音轨转录」获取带时间戳的字幕（目前限 25MB 本地文件且转录接口需支持时间戳）；② 选择翻译服务并翻译字幕；③ 在视频画面内显示原文 / 译文 / 双语，横屏全屏时也会保留。字幕翻译与弹幕生成分开计费，译文优先使用本地缓存。</p>
  <div className="rounded-lg border border-primary/30 bg-secondary/20 p-3 space-y-2">
    <p className="font-semibold text-sm">① 取得视频字幕</p>
    <p className="text-xs text-muted-foreground">{cues.length?("已准备 "+cues.length+" 段字幕，可以直接进行下一步。"):"还没有字幕。可在视频上方导入 SRT/VTT，或从本地短视频提取音轨字幕。"}</p>
