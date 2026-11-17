@@ -76,10 +76,10 @@ export function shipBoundaries(a: AudienceConfig): string[] {
     for (const entry of entries) {
       if (entry.right) {
         lines.push(entry.mode === "fixed"
-          ? \`- 固定左右：\${entry.left} × \${entry.right}（左侧为攻、右侧为受；不可逆，不得写成 \${entry.right} × \${entry.left}）\`
-          : \`- 无差杂食：\${entry.left} ↔ \${entry.right}（允许左右互换，仅此二人，不得拉入第三人）\`);
+          ? `- 固定左右：${entry.left} × ${entry.right}（左侧为攻、右侧为受；不可逆，不得写成 ${entry.right} × ${entry.left}）`
+          : `- 无差杂食：${entry.left} ↔ ${entry.right}（允许左右互换，仅此二人，不得拉入第三人）`);
       } else {
-        lines.push(\`- 旧版 CP 条目（未识别方向）：\${entry.left}；不得擅自推断攻受，请到设置里拆成两个名字。\`);
+        lines.push(`- 旧版 CP 条目（未识别方向）：${entry.left}；不得擅自推断攻受，请到设置里拆成两个名字。`);
       }
     }
     lines.push("- CP 攻受/无差是用户的同人解读偏好，不要把它说成视频已证实的事实；没有视频依据时只做轻量玩梗。");
