@@ -7,6 +7,26 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <script>
+      // If a cached SPA shell requests a CSS file no longer present after a
+      // deployment, retry the HTML navigation once with a cache-busting query.
+      // Keep IndexedDB, local videos and user credentials untouched.
+      window.addEventListener("error", function (event) {
+        const link = event.target;
+        if (!(link instanceof HTMLLinkElement) || link.rel !== "stylesheet") return;
+        let url;
+        try { url = new URL(link.href, location.href); } catch { return; }
+        if (url.origin !== location.origin || !url.pathname.startsWith("/assets/")) return;
+        const key = "cowatch:css-retry:" + url.pathname;
+        try {
+          if (sessionStorage.getItem(key) === "1") return;
+          sessionStorage.setItem(key, "1");
+        } catch { return; }
+        const next = new URL(location.href);
+        next.searchParams.set("_refresh", String(Date.now()));
+        location.replace(next.href);
+      }, true);
+    </script>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/app-icon.svg" />
     <meta name="description" content="共映 CoWatch：本地视频与 AI 弹幕放映室，使用自己的 API。" />
