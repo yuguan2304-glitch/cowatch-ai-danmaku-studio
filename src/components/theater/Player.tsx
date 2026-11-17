@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Film, Maximize, Minimize, Upload, Play, Pause, Volume2, VolumeX } from "lucide-react";
 import { useApp } from "@/lib/store";
 import { setClock, stageRef, toggleFullscreen } from "@/lib/clock";
@@ -12,6 +13,7 @@ export function Player() {
   const demo = useApp((s) => s.demo);
   const hasDanmaku = useApp((s) => s.danmaku.length > 0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const resumeRef = useRef<{time:number;playing:boolean}|null>(null);
   const [fauxFullscreen, setFauxFullscreen] = useState(false);
   const [portrait, setPortrait] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -23,20 +25,24 @@ export function Player() {
   // Use page-level cinema mode rather than the browser's native Android
   // fullscreen, which can show a persistent system exit banner and hide controls.
   useEffect(() => {
-    const stage = stageRef.current;
     const checkPortrait = () => setPortrait(window.innerHeight > window.innerWidth);
-    const toggle = () => { checkPortrait(); setFauxFullscreen(v => !v); };
+    const toggle = () => {
+      const v = videoRef.current;
+      if (v) resumeRef.current = {time:v.currentTime, playing:!v.paused};
+      checkPortrait();
+      setFauxFullscreen(x => !x);
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setFauxFullscreen(false);
     };
     checkPortrait();
     window.addEventListener("resize", checkPortrait);
     window.addEventListener("keydown", onKey);
-    stage?.addEventListener("cowatch:toggle-fullscreen", toggle);
+    window.addEventListener("cowatch:toggle-fullscreen", toggle);
     return () => {
       window.removeEventListener("resize", checkPortrait);
       window.removeEventListener("keydown", onKey);
-      stage?.removeEventListener("cowatch:toggle-fullscreen", toggle);
+      window.removeEventListener("cowatch:toggle-fullscreen", toggle);
     };
   }, []);
 
@@ -81,7 +87,7 @@ export function Player() {
       },
     });
     return () => setClock(null);
-  }, [isHtmlVideo, source.src, source.crossOrigin]);
+  }, [isHtmlVideo, source.src, source.crossOrigin, fauxFullscreen]);
 
   const onVideoError = () => {
     const st = useApp.getState();
@@ -103,15 +109,13 @@ export function Player() {
     });
   };
 
-  return (
+  const stage = (
     <div
       ref={(el) => {
         stageRef.current = el;
       }}
       className="group/stage relative aspect-video w-full overflow-hidden rounded-lg bg-screen shadow-screen"
-      // Inline positioning overrides the base 'relative/aspect-video' styles.
-      // Utility classes alone can resolve in the wrong order, leaving a rotated
-      // player embedded in the page (rather than covering the viewport).
+      // Portal this stage into document.body: page ancestors cannot trap fixed positioning.
       style={fauxFullscreen ? {
         position: "fixed",
         zIndex: 9999,
@@ -119,7 +123,7 @@ export function Player() {
         left: portrait ? "100vw" : 0,
         width: portrait ? "100dvh" : "100dvw",
         height: portrait ? "100dvw" : "100dvh",
-        transform: portrait ? "rotate(-90deg)" : "none",
+        transform: portrait ? "rotate(90deg)" : "none",
         transformOrigin: "top left",
         aspectRatio: "auto",
         borderRadius: 0,
@@ -150,7 +154,20 @@ export function Player() {
           preload="metadata"
           disablePictureInPicture
           className="absolute inset-0 h-full w-full"
-          onLoadedMetadata={(e) => { const d=e.currentTarget.duration || 0; useApp.getState().setDuration(d); setDuration(d); }}
+          onLoadedMetadata={(e) => {
+            const video=e.currentTarget;
+            const d=video.duration || 0;
+            useApp.getState().setDuration(d);
+            setDuration(d);
+            const resume=resumeRef.current;
+            if (resume) {
+              resumeRef.current=null;
+              if (Number.isFinite(resume.time) && resume.time > 0) {
+                video.currentTime = Math.min(resume.time, Number.isFinite(d) && d>0 ? d : resume.time);
+              }
+              if (resume.playing) void video.play().catch(()=>undefined);
+            }
+          }}
           onDurationChange={(e) => {
             const d = e.currentTarget.duration;
             if (Number.isFinite(d) && d > 0) { useApp.getState().setDuration(d); setDuration(d); }
@@ -224,8 +241,9 @@ export function Player() {
       {source.kind !== "none" && !isHtmlVideo && (
         <button type="button" onClick={() => void toggleFullscreen()} className="absolute right-2 top-2 z-50 rounded-md bg-black/85 px-3 py-2 text-sm font-bold text-white" aria-label={fauxFullscreen?"退出放大":"放大画面"}>{fauxFullscreen?"退出放大":"放大画面"}</button>
       )}
-      {fauxFullscreen && <button type="button" onClick={() => setFauxFullscreen(false)} className="absolute right-3 top-3 z-[70] rounded-lg border border-white/50 bg-black/85 px-4 py-2 text-sm font-bold text-white shadow-lg" aria-label="退出横屏返回放映室"><Minimize className="mr-1 inline size-4"/> 退出横屏</button>}
+      {fauxFullscreen && <button type="button" onClick={() => void toggleFullscreen()} className="absolute right-3 top-3 z-[70] rounded-lg border border-white/50 bg-black/85 px-4 py-2 text-sm font-bold text-white shadow-lg" aria-label="退出横屏返回放映室"><Minimize className="mr-1 inline size-4"/> 退出横屏</button>}
 
     </div>
   );
+  return fauxFullscreen ? createPortal(stage, document.body) : stage;
 }
