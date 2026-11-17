@@ -1,6 +1,17 @@
 name: Deploy CoWatch to Cloudflare Workers
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'bun.lock'
+      - 'vite.config.*'
+      - 'wrangler.jsonc'
+      - '.github/workflows/deploy-cloudflare.yml'
 
 permissions:
   contents: read
