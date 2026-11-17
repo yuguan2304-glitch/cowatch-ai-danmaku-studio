@@ -5,7 +5,9 @@ import { pipeline, env } from "@huggingface/transformers";
 env.allowRemoteModels = true;
 env.useBrowserCache = true;
 
-let recognizer: Awaited<ReturnType<typeof pipeline>> | null = null;
+type Recognizer = (audio: Float32Array, options: Record<string, unknown>) => Promise<unknown>;
+let recognizer: Recognizer | null = null;
+const createPipeline = pipeline as unknown as (task: string, model: string, options: Record<string, unknown>) => Promise<Recognizer>;
 
 type WorkerRequest =
   | { kind: "load" }
@@ -16,7 +18,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   try {
     if (!recognizer) {
       self.postMessage({kind: "progress", text: "首次使用：正在下载并缓存本地英语语音模型（可能消耗较多流量）…"});
-      recognizer = await pipeline("automatic-speech-recognition", "onnx-community/whisper-tiny.en", {
+      recognizer = await createPipeline("automatic-speech-recognition", "onnx-community/whisper-tiny.en", {
         device: "wasm",
         dtype: "q8",
         progress_callback: (item: {status?: string; progress?: number}) => {
@@ -28,7 +30,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       self.postMessage({kind: "ready"});
     }
     if (data.kind === "load") return;
-    const result = await (recognizer as any)(data.data, { return_timestamps: true, task: "transcribe" });
+    const result = await recognizer(data.data, { return_timestamps: true, task: "transcribe" });
     const raw = result as {text?: string; chunks?: {text: string; timestamp: [number, number | null]}[]};
     const cues = Array.isArray(raw.chunks)
       ? raw.chunks.filter(c => c.text?.trim()).map(c => ({
