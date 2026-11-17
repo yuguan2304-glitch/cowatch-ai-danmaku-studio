@@ -27,6 +27,10 @@ export type AudienceConfig = {
   memorySize: number;
   globalBannedWords: string;
   extraPrompt: string;
+  /** Explicitly allowed CP pairings, separated by newline or commas. */
+  shipPairs?: string;
+  /** Pairings users do not want mentioned. */
+  blockedPairs?: string;
 };
 
 export type ProviderKind = "openai" | "gemini";
