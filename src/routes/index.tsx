@@ -63,7 +63,7 @@ export function Index() {
         <div className="flex shrink-0 items-center justify-between border-b border-border p-4"><h2 className="flex items-center gap-2 font-bold"><Settings2 className="size-5"/> 共映设置</h2><Button size="sm" variant="ghost" aria-label="关闭设置侧栏" onClick={()=>setSettingsOpen(false)}><X className="size-5"/></Button></div>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 pb-10">
           <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🎬 视频辅助工具</summary><SourceBar toolsOnly/></details>
-          <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🎛️ 弹幕显示</summary><DisplayControls/></details>
+          <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🎛️ 弹幕显示</summary><DisplayControls inDrawer/></details>
           <GenerationPanel/>
           <TranslationPanel/>
                   <details className="panel group space-y-2 p-3"><summary className="cursor-pointer list-item font-bold">💬 弹幕列表 · {s.danmaku.length} 条</summary>
@@ -90,6 +90,19 @@ export function Index() {
           <p className="text-sm">观众类型（多选）</p><div className="flex flex-wrap gap-1">{IDENTITIES.map(x=><Button key={x.id} size="sm" title={x.desc} variant={a.identities[x.id]?"default":"outline"} onClick={()=>toggleWeight("identities",x.id)}>{x.label}</Button>)}</div>
           {Boolean(a.identities["shipper"]) && <div className="space-y-2 rounded-lg border border-primary/30 bg-secondary/30 p-3"><p className="text-sm font-bold">💞 磕学家 · 指定 CP</p><p className="text-xs text-muted-foreground">每行填写一组，例如「角色A × 角色B」。多个 CP 可以换行。只有指定的组合允许恋爱向嗑 CP；不填写就只讨论友情和人物关系，不会随机拉郎配。</p><Textarea rows={3} placeholder={"角色A × 角色B\n角色C × 角色D"} value={a.shipPairs ?? ""} onChange={e=>s.update("audience",{shipPairs:e.target.value})}/><label className="block text-xs">不想看到的 CP（可选，每行一组）<Textarea rows={2} placeholder="不希望出现的组合" value={a.blockedPairs ?? ""} onChange={e=>s.update("audience",{blockedPairs:e.target.value})}/></label></div>}
           <p className="text-sm">语气（多选）</p><div className="flex flex-wrap gap-1">{TONES.map(x=><Button key={x.id} size="sm" variant={a.tones[x.id]?"default":"outline"} onClick={()=>toggleWeight("tones",x.id)}>{x.label}</Button>)}</div>
+          <details className="rounded-lg border border-border p-3 space-y-2">
+            <summary className="cursor-pointer font-semibold">📖 我的世界书 · 梗 / 人设 / 口癖</summary>
+            <p className="text-xs text-muted-foreground">每行一条。推荐格式：[Dream] 说话经常带点得意；[*] 所有观众可以玩这个梗。带标签的内容只在视频标题或当前字幕出现对应关键词时发送，[*] 始终生效。单次最多采用 12 条、1200 字，不会整本上传。世界书只辅助理解背景，不能伪造视频事实。</p>
+            <Textarea rows={7} value={a.worldBook ?? ""} disabled={s.generating} placeholder={"[Dream] 喜欢用轻快得意的语气吐槽\\n[Techno] 常用冷幽默\\n[*] 不要把观众设定写成实际画面"} onChange={e=>s.update("audience",{worldBook:e.target.value.slice(0,50000)})}/>
+            <div className="flex flex-wrap gap-2">
+              <label className="rounded-md border px-2 py-1 text-sm cursor-pointer">导入 TXT / MD / JSON
+                <input type="file" accept=".txt,.md,.json,text/plain,application/json" className="hidden" disabled={s.generating} onChange={async e=>{const f=e.target.files?.[0];e.target.value="";if(!f)return;try{if(f.size>150000){toast.error("世界书文件最大 150KB");return;}let raw=await f.text();if(f.name.toLowerCase().endsWith(".json")){const data:unknown=JSON.parse(raw);if(typeof data==="string")raw=data;else if(Array.isArray(data))raw=data.map(v=>typeof v==="string"?v:(v&&typeof v==="object"?"["+String((v as Record<string,unknown>).keyword??(v as Record<string,unknown>).key??"*")+"] "+String((v as Record<string,unknown>).content??(v as Record<string,unknown>).text??""):"")).join("\\n");else if(data&&typeof data==="object"){const ob=data as Record<string,unknown>;raw=typeof ob.content==="string"?ob.content:typeof ob.worldBook==="string"?ob.worldBook:JSON.stringify(data);}else throw new Error("世界书 JSON 格式无法读取");}if((a.worldBook??"").trim()&&!confirm("合并到已有世界书末尾？取消则不导入。"))return;s.update("audience",{worldBook:[a.worldBook,raw].filter(Boolean).join("\\n").slice(0,50000)});toast.success("世界书导入成功，已保存到本机设置");}catch(err){toast.error("导入失败："+(err instanceof Error?err.message:String(err)));}}}/>
+              </label>
+              <Button size="sm" variant="outline" disabled={!(a.worldBook??"").trim()} onClick={()=>downloadText("cowatch-worldbook.txt",a.worldBook??"","text/plain")}>导出备份</Button>
+              <Button size="sm" variant="ghost" disabled={s.generating||!(a.worldBook??"").trim()} onClick={()=>{if(confirm("清空世界书？建议先导出备份。"))s.update("audience",{worldBook:""});}}>清空</Button>
+            </div>
+            <p className="text-xs text-muted-foreground">世界书只在这台设备保存，不同步到其他设备。导入的内容可能发送给你选择的 AI API 服务商。请勿放入私人密码或 API 密钥。</p>
+          </details>
           <label className="block text-sm">额外要求（人物、圈内梗、偏好）<Textarea value={a.extraPrompt} onChange={e=>s.update("audience",{extraPrompt:e.target.value})}/></label>
           <label className="block text-sm">屏蔽词<Input value={a.globalBannedWords} onChange={e=>s.update("audience",{globalBannedWords:e.target.value})}/></label>
           <label className="flex gap-2 text-sm"><input type="checkbox" checked={a.interaction} onChange={e=>s.update("audience",{interaction:e.target.checked})}/>允许观众互动</label>
@@ -98,6 +111,20 @@ export function Index() {
           <label className="block text-sm">密度 · {g.density} 条/分钟<input className="w-full" type="range" min="5" max="100" step="5" value={g.density} onChange={e=>s.update("generation",{density:Number(e.target.value)})}/></label>
           <label className="block text-sm">抽帧间隔 · {an.frameInterval} 秒<input className="w-full" type="range" min="1" max="15" value={an.frameInterval} onChange={e=>s.update("analysis",{frameInterval:Number(e.target.value)})}/></label>
           <label className="flex gap-2 text-sm"><input type="checkbox" checked={g.noSpoiler} onChange={e=>s.update("generation",{noSpoiler:e.target.checked})}/>防剧透（提示词约束）</label>
+          <div className="rounded-lg border border-primary/30 bg-secondary/20 p-3 space-y-2">
+            <p className="text-sm font-semibold">💸 省钱档位 · 仅改变后续生成设置</p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" disabled={s.generating} onClick={()=>{s.update("analysis",{segmentLength:180,frameInterval:30,frameMaxWidth:384});s.update("generation",{density:12,totalLimit:120,requestLimit:5,maxRetries:0});s.update("provider",{imageDetail:"low"});toast.success("已选超省模式：本轮最多尝试 5 个片段");}}>超省 💚</Button>
+              <Button type="button" size="sm" variant="outline" disabled={s.generating} onClick={()=>{s.update("analysis",{segmentLength:120,frameInterval:20,frameMaxWidth:384});s.update("generation",{density:20,totalLimit:250,requestLimit:10,maxRetries:1});s.update("provider",{imageDetail:"low"});toast.success("已选均衡模式：本轮最多尝试 10 个片段");}}>均衡 🍿</Button>
+              <Button type="button" size="sm" variant="outline" disabled={s.generating} onClick={()=>{s.update("analysis",{segmentLength:30,frameInterval:5,frameMaxWidth:512});s.update("generation",{density:35,totalLimit:null,requestLimit:null,maxRetries:2});toast.warning("已选高质量模式：无请求上限，长视频可能花费较多！");}}>高质量 ⚠️</Button>
+            </div>
+            <label className="block text-sm">本轮最多处理片段数
+              <select className="w-full rounded border bg-background p-2" disabled={s.generating} value={g.requestLimit==null?"unlimited":String(g.requestLimit)} onChange={e=>s.update("generation",{requestLimit:e.target.value==="unlimited"?null:Number(e.target.value)})}>
+                <option value="3">3 个片段</option><option value="5">5 个片段</option><option value="10">10 个片段</option><option value="20">20 个片段</option><option value="unlimited">不限制（谨慎）</option>
+              </select>
+            </label>
+            <p className="text-xs text-muted-foreground">这是每轮处理的片段上限，不是金额上限。失败重试仍可能额外计费；长片段也可能增加单次 token。已经生成的内容不会自动重算。</p>
+          </div>
           <label className="block text-sm">生成模式<select className="w-full rounded border bg-background p-2" value={g.bufferMode} onChange={e=>s.update("generation",{bufferMode:e.target.value==="live"?"live":"full"})}><option value="full">预生成</option><option value="live">边播边生成</option></select></label>
         </details>
       </fieldset></div>
