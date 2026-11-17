@@ -63,6 +63,11 @@ export function GenerationPanel() {
 
   const start = async () => {
     try {
+      const current = useApp.getState();
+      const remaining = Math.ceil(Math.max(0,current.duration) / Math.max(5,current.settings.analysis.segmentLength))
+        - current.segments.filter(x => x.status === "done").length;
+      if (current.settings.generation.requestLimit == null && remaining > 10
+        && !window.confirm(`即将尝试处理约 ${remaining} 个片段且没有请求上限。长视频使用付费模型可能产生较高费用。是否继续？\n建议先在「生成设置」选择「先试 2 分钟」或限制片段数。`)) return;
       await startGeneration();
     } catch (e) {
       toast.error((e as Error).message);
