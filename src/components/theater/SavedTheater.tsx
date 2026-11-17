@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookmarkPlus, Clapperboard, Heart, Play, Trash2, RefreshCw } from "lucide-react";
+import { BookmarkPlus, Clapperboard, Heart, Play, Trash2, RefreshCw, Download, Upload } from "lucide-react";
+import { exportScreeningPackage, importScreeningPackage } from "@/lib/screening-package";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
@@ -42,12 +43,23 @@ export function SavedTheater() {
   const savedId = useApp(s => s.savedScreeningId);
   const [records, setRecords] = useState<SavedScreening[]>([]);
   const [busy, setBusy] = useState(false);
+  const [storageEstimate, setStorageEstimate] = useState<string>("");
 
   const reload = useCallback(async () => {
     try { setRecords(await db.listScreenings()); }
     catch { toast.error("无法读取本机放映收藏。请确认浏览器允许保存网站数据。"); }
   }, []);
   useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    if (!navigator.storage?.estimate) return;
+    void navigator.storage.estimate().then(({ usage, quota }) => {
+      if (usage !== undefined && quota !== undefined) {
+        storageEstimate = "";
+        setStorageEstimate("本机网站存储约 " + (usage / 1024 / 1024).toFixed(0) +
+          " MB / " + (quota / 1024 / 1024).toFixed(0) + " MB（浏览器估算）");
+      }
+    }).catch(() => undefined);
+  }, [records.length]);
 
   const save = async () => {
     if (source.kind === "none" || generating) return;
@@ -116,6 +128,21 @@ export function SavedTheater() {
     document.getElementById("cowatch-player-top")?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const importPackage = async (file: File) => {
+    if (generating) { toast.error("请先停止生成弹幕"); return; }
+    setBusy(true);
+    try {
+      const item = await importScreeningPackage(file);
+      await db.putScreening(item);
+      await reload();
+      toast.success("完整放映包已导入本机收藏，离线观看无需重新生成弹幕");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "导入失败；请检查文件和剩余空间");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const remove = async (item: SavedScreening) => {
     if (!window.confirm("从本设备删除「" + item.title + "」及其收藏的弹幕、评论和视频副本？删除后无法恢复。")) return;
     try {
@@ -147,7 +174,7 @@ export function SavedTheater() {
           {!compact && <p className="text-xs text-muted-foreground">{new Date(item.updatedAt).toLocaleDateString("zh-CN")} · {item.sourceKind === "file" ? "本地视频" : "外链视频"}</p>}
         </div>
       </button>
-      {!compact && <div className="flex justify-end border-t border-border px-2 py-1">
+      {!compact && <div className="flex justify-end gap-1 border-t border-border px-2 py-1">\n        {item.sourceKind === "file" && item.file && <Button size="sm" variant="outline" onClick={() => { try { exportScreeningPackage(item); toast.success("已开始导出完整放映包"); } catch (error) { toast.error((error as Error).message); } }}><Download className="size-3.5"/> 导出放映包</Button>}
         <Button size="sm" variant="ghost" onClick={() => void remove(item)}><Trash2 className="size-3.5"/> 删除收藏</Button>
       </div>}
     </div>
@@ -156,6 +183,14 @@ export function SavedTheater() {
   return <section className="panel space-y-3 p-3 sm:p-4" id="my-screenings">
     <div className="flex flex-wrap items-center gap-2">
       <h2 className="mr-auto flex items-center gap-2 font-bold"><Heart className="size-5 text-primary"/> 猜你喜欢 <span className="text-xs font-normal text-muted-foreground">来自我的放映室</span></h2>
+      <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-secondary">
+        <Upload className="size-3.5"/>导入放映包
+        <input className="sr-only" type="file" accept=".cowatch" disabled={busy || generating} onChange={e => {
+          const file = e.target.files?.[0];
+          if (file) void importPackage(file);
+          e.target.value = "";
+        }}/>
+      </label>
       <Button size="sm" variant="marquee" disabled={source.kind === "none" || generating || busy} onClick={() => void save()}><BookmarkPlus className="size-4"/>{busy ? "保存中…" : savedId ? "更新这场放映" : "收藏这场放映"}</Button>
     </div>
     {!records.length ? <div className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">这里将成为你的私人观影首页。先选一个视频，生成弹幕和评论，再点「收藏这场放映」就能拥有第一张推荐卡片啦！🍿</div> : <>
@@ -166,6 +201,6 @@ export function SavedTheater() {
         <Button size="sm" variant="ghost" onClick={() => void reload()}><RefreshCw className="size-4"/> 刷新收藏</Button>
       </details>
     </>}
-    <p className="text-xs text-muted-foreground">这些都是你自己保存的放映记录，推荐卡片只从本机收藏中轮换，不是其他人的真实投稿。本地视频会占用设备存储；切换浏览器、卸载 App 或清除网站数据可能导致收藏丢失。修改弹幕后记得点「更新这场放映」。</p>
+    {storageEstimate && <p className="text-xs text-muted-foreground">{storageEstimate}</p>}\n    <p className="text-xs text-muted-foreground">支持导出和导入 .cowatch 完整放映包。断网启动需先联网打开新版共映至少一次，让离线网页资源完成缓存。仅本地文件可以完整离线播放；外链仍需网络。 </p>\n    <p className="text-xs text-muted-foreground">这些都是你自己保存的放映记录，推荐卡片只从本机收藏中轮换，不是其他人的真实投稿。本地视频会占用设备存储；切换浏览器、卸载 App 或清除网站数据可能导致收藏丢失。修改弹幕后记得点「更新这场放映」。</p>
   </section>;
 }
