@@ -8,6 +8,7 @@ export async function transcribeLocalVideo(opts: {
   file: File;
   signal: AbortSignal;
   maxSeconds: number;
+  modelHost?: string;
   onProgress: (text: string) => void;
   onPartial?: (cues: Cue[]) => void;
 }): Promise<Cue[]> {
@@ -79,7 +80,7 @@ export async function transcribeLocalVideo(opts: {
     if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error("无法获取视频时长");
     const endAt = Math.min(video.duration, opts.maxSeconds);
     opts.onProgress("准备本地英语语音模型…首次可能需要下载数十 MB 到上百 MB 文件");
-    await sendWorker({kind:"load"}, "ready");
+    await sendWorker({kind:"load",modelHost:opts.modelHost}, "ready");
     ensureActive();
 
     source = context.createMediaElementSource(video);
