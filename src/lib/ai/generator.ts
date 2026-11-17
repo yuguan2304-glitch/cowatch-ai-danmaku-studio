@@ -76,8 +76,8 @@ export function ensureSegments() {
   const segs = st.segments;
   const stale =
     segs.length === 0 ||
-    Math.abs(segs[segs.length - 1].end - st.duration) > 0.5 ||
-    Math.abs(segs[0].end - segs[0].start - Math.min(len, st.duration)) > 0.01;
+    Math.abs(segs[segs.length - 1]!.end - st.duration) > 0.5 ||
+    Math.abs(segs[0]!.end - segs[0]!.start - Math.min(len, st.duration)) > 0.01;
   if (stale) st.setSegments(buildSegments(st.duration, len));
 }
 
@@ -85,13 +85,13 @@ function pickNext(): Segment | null {
   const { segments, settings } = useApp.getState();
   const open = segments.filter((s) => s.status === "pending" || s.status === "cancelled");
   if (!open.length) return null;
-  if (settings.generation.bufferMode === "full") return open[0];
+  if (settings.generation.bufferMode === "full") return open[0] ?? null;
   const t = getClock()?.getTime() ?? 0;
   const ahead = open.filter((s) => s.end > t && s.start <= t + settings.generation.lookahead);
   if (ahead.length) return ahead.reduce((a, b) => (a.start < b.start ? a : b));
   const anyAhead = open.some((s) => s.end > t);
   if (anyAhead) return null; // wait until playback approaches
-  return open[0]; // only past segments remain — fill them in
+  return open[0] ?? null; // only past segments remain — fill them in
 }
 
 async function runSegment(seg: Segment, signal: AbortSignal) {
