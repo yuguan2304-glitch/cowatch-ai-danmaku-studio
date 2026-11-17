@@ -66,7 +66,7 @@ export function parseWorldBookFile(fileName: string, raw: string): WorldBookImpo
     // Tagged CoWatch syntax: [keywords] content; plain untagged lines become constant.
     rows = stripped.split("\n").filter(line=>line.trim() && !line.trim().startsWith("#")).map(line=>{
       const m = /^\[([^\]]{1,120})\]\s*(.+)$/.exec(line.trim());
-      return m ? {content:m[2], key:m[1]==="*"?[]:m[1].split(/[,，|]/),constant:m[1]==="*" || /^观众[:：]/.test(m[1]??""),comment:m[1]} : {content:line,constant:true};
+      return m ? {content:m[2], key:m[1]==="*"?[]:m[1]!.split(/[,，|]/),constant:m[1]==="*" || /^观众[:：]/.test(m[1]??""),comment:m[1]} : {content:line,constant:true};
     });
   } else {
     throw new Error("暂支持 JSON、TXT、MD 文件");
