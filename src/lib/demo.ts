@@ -18,9 +18,9 @@ export function makeDemoDanmaku(duration: number, perMinute: number): Danmaku[] 
     out.push({
       id: uid("demo"),
       time,
-      text: TEXTS[Math.floor(Math.random() * TEXTS.length)],
-      viewer: VIEWERS[i % VIEWERS.length],
-      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      text: TEXTS[Math.floor(Math.random() * TEXTS.length)]!,
+      viewer: VIEWERS[i % VIEWERS.length]!,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)]!,
       demo: true,
     });
   }
