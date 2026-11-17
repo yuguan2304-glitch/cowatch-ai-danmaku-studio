@@ -1,0 +1,24 @@
+{
+  "id": "/",
+  "name": "共映 CoWatch · AI弹幕放映室",
+  "short_name": "共映",
+  "description": "本地观影、AI 弹幕与虚拟观众评论",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "standalone"
+  ],
+  "background_color": "#141110",
+  "theme_color": "#141110",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
