@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { FileVideo, Link2, Captions, Mic, X, Loader2, Languages } from "lucide-react";
+import { FileVideo, Link2, Captions, Mic, X, Loader2, Languages, Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Notice } from "@/components/form-bits";
@@ -119,6 +119,10 @@ export function SourceBar() {
             }
           }}
         />
+        {source.kind === "url" && <a href={source.src} download target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm" title="尝试由浏览器保存视频文件；跨域服务器可能忽略 download 属性而改为打开链接"><Download className="size-4"/> 下载直链视频</a>}
+        {(source.kind === "youtube" || source.kind === "bilibili") && <a href={source.kind==="youtube" ? "https://www.youtube.com/watch?v="+source.youtubeId : source.label} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm" title="前往官方视频页面，使用平台提供的合法离线/下载方式"><ExternalLink className="size-4"/> 前往平台保存</a>}
+        {(source.kind === "youtube" || source.kind === "bilibili") && <span className="text-xs text-muted-foreground">平台嵌入视频无法直接下载成 MP4；请使用平台允许的离线方式，或选择自己拥有的本地视频。</span>}
+        {source.kind === "url" && <span className="text-xs text-muted-foreground">直链下载取决于视频服务器是否允许。若浏览器只打开视频，可尝试浏览器菜单「下载」。</span>}
         {source.kind === "file" &&
           (busy ? (
             <Button size="sm" variant="outline" onClick={() => abortRef.current?.abort()}>
