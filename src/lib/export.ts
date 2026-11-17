@@ -22,7 +22,7 @@ export function toJsonExport(title: string, danmaku: Danmaku[], demo: boolean): 
   return JSON.stringify(payload, null, 2);
 }
 
-export function fromJsonImport(raw: string): { danmaku: Danmaku[]; demo: boolean; title?: string } {
+export function fromJsonImport(raw: string): { danmaku: Danmaku[]; demo: boolean; title?: string | undefined } {
   const data = JSON.parse(raw) as unknown;
   const arr = Array.isArray(data)
     ? data
@@ -34,22 +34,22 @@ export function fromJsonImport(raw: string): { danmaku: Danmaku[]; demo: boolean
   for (const e of arr) {
     if (!e || typeof e !== "object") continue;
     const r = e as Record<string, unknown>;
-    const time = Number(r.time);
-    const text = typeof r.text === "string" ? r.text.trim() : "";
+    const time = Number(r["time"]);
+    const text = typeof r["text"] === "string" ? r["text"].trim() : "";
     if (!Number.isFinite(time) || time < 0 || !text) continue;
     out.push({
       id: uid("d"),
       time,
       text,
-      viewer: typeof r.viewer === "string" ? r.viewer : "导入",
-      color: typeof r.color === "string" && /^#[0-9a-fA-F]{6}$/.test(r.color) ? r.color : "#FFFFFF",
+      viewer: typeof r["viewer"] === "string" ? r["viewer"] : "导入",
+      color: typeof r["color"] === "string" && /^#[0-9a-fA-F]{6}$/.test(r["color"]) ? r["color"] : "#FFFFFF",
     });
   }
   const obj = !Array.isArray(data) ? (data as Record<string, unknown>) : {};
   return {
     danmaku: out.sort((a, b) => a.time - b.time),
-    demo: obj.demo === true,
-    title: typeof obj.title === "string" ? obj.title : undefined,
+    demo: obj["demo"] === true,
+    title: typeof obj["title"] === "string" ? obj["title"] : undefined,
   };
 }
 
