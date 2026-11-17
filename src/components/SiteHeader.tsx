@@ -3,9 +3,6 @@ import { Clapperboard } from "lucide-react";
 
 const NAV = [
   { to: "/", label: "放映室" },
-  { to: "/history", label: "历史" },
-  { to: "/presets", label: "观众预设" },
-  { to: "/guide", label: "配置指引" },
 ] as const;
 
 export function SiteHeader() {
