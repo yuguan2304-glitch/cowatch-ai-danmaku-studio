@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { defaultSettings } from "./constants";
 import { uid } from "./id";
-import type { Cue, Danmaku, Segment, Settings, VideoSource } from "./types";
+import type { Cue, Danmaku, Segment, Settings, TheaterComment, VideoSource } from "./types";
 
 // One-time privacy reset: previous remembered keys, endpoints and model selection
 // must not reappear merely because users opened an older deployed version.
@@ -29,6 +29,8 @@ type AppState = {
   cues: Cue[];
   cueLabel: string;
   danmaku: Danmaku[];
+  comments: TheaterComment[];
+  savedScreeningId: string | null;
   demo: boolean;
   segments: Segment[];
   generating: boolean;
@@ -43,6 +45,8 @@ type AppState = {
   setDuration: (d: number) => void;
   setCues: (cues: Cue[], label: string) => void;
   setDanmaku: (d: Danmaku[], demo?: boolean) => void;
+  setComments: (next: TheaterComment[] | ((prev: TheaterComment[]) => TheaterComment[])) => void;
+  setSavedScreeningId: (id: string | null) => void;
   addDanmaku: (d: Danmaku[]) => void;
   updateDanmaku: (id: string, patch: Partial<Danmaku>) => void;
   removeDanmaku: (id: string) => void;
@@ -64,6 +68,8 @@ export const useApp = create<AppState>((set) => ({
   cues: [],
   cueLabel: "",
   danmaku: [],
+  comments: [],
+  savedScreeningId: null,
   demo: false,
   segments: [],
   generating: false,
@@ -82,6 +88,8 @@ export const useApp = create<AppState>((set) => ({
         duration: 0,
         segments: [],
         danmaku: keep ? st.danmaku : [],
+        comments: [],
+        savedScreeningId: null,
         demo: keep ? st.demo : false,
         cues: keep ? st.cues : [],
         cueLabel: keep ? st.cueLabel : "",
@@ -94,6 +102,8 @@ export const useApp = create<AppState>((set) => ({
   setDuration: (duration) => set({ duration }),
   setCues: (cues, cueLabel) => set({ cues, cueLabel }),
   setDanmaku: (danmaku, demo = false) => set({ danmaku: [...danmaku].sort((a, b) => a.time - b.time), demo }),
+  setComments: (next) => set(st => ({ comments: typeof next === "function" ? next(st.comments) : next })),
+  setSavedScreeningId: (savedScreeningId) => set({ savedScreeningId }),
   addDanmaku: (d) =>
     set((st) => ({ danmaku: [...st.danmaku, ...d].sort((a, b) => a.time - b.time), demo: false })),
   updateDanmaku: (id, patch) =>
