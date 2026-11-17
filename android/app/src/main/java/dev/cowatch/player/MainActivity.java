@@ -45,7 +45,7 @@ public final class MainActivity extends Activity {
             if (customVideo == null) {
                 // Read top-level DOM only: no JavaScript bridge is exposed to third-party iframes.
                 webView.evaluateJavascript(
-                    "(function(){return !!document.querySelector('[data-fs=\\\"true\\\"]')})()",
+                    "(function(){return !!document.querySelector('[data-fs=true]')})()",
                     value -> {
                         if (webView == null || customVideo != null) return;
                         boolean requested = "true".equals(value);
