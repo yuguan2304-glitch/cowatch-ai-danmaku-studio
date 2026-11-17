@@ -19,10 +19,10 @@ export function parseSubtitles(raw: string): Cue[] {
     const lines = block.split("\n").filter((l) => l.trim() !== "");
     const idx = lines.findIndex((l) => l.includes("-->"));
     if (idx === -1) continue;
-    const [a, bRaw] = lines[idx].split("-->");
-    const b = bRaw.trim().split(/\s+/)[0];
-    const start = parseTimestamp(a);
-    const end = parseTimestamp(b);
+    const [a, bRaw] = lines[idx]!.split("-->");
+    const b = (bRaw ?? "").trim().split(/\s+/)[0];
+    const start = parseTimestamp(a ?? "");
+    const end = parseTimestamp(b ?? "");
     if (start === null || end === null) continue;
     const body = lines
       .slice(idx + 1)
