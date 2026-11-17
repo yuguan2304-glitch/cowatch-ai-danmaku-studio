@@ -23,6 +23,16 @@ export function TranslationPanel(){
  const [transcriptionProgress,setTranscriptionProgress]=useState("");
  const [localModelCheck,setLocalModelCheck]=useState("");
  const [checkingModel,setCheckingModel]=useState(false);
+ const [modelSource,setModelSource]=useState<"official"|"mirror"|"custom">(()=>{
+   try {const v=localStorage.getItem("cowatch:whisper-model-source:v1");return v==="mirror"||v==="custom"?v:"official";}catch{return "official";}
+ });
+ const [customModelHost,setCustomModelHost]=useState(()=>{
+   try{return localStorage.getItem("cowatch:whisper-model-host:v1")||"";}catch{return "";}
+ });
+ const modelHost=modelSource==="official"?"https://huggingface.co":modelSource==="mirror"?"https://hf-mirror.com":customModelHost.trim().replace(/\\/+$/,"");
+ useEffect(()=>{
+   try {localStorage.setItem("cowatch:whisper-model-source:v1",modelSource);localStorage.setItem("cowatch:whisper-model-host:v1",customModelHost);}catch{/* local settings unavailable */}
+ },[modelSource,customModelHost]);
  const [localError,setLocalError]=useState("");
  const [translationKey,setTranslationKey]=useState(()=>getRememberedTranslationKey()),[translationUrl,setTranslationUrl]=useState(()=>loadTranslationPrefs()?.url??"https://api.openai.com/v1"),[translationModel,setTranslationModel]=useState(()=>loadTranslationPrefs()?.model??"gpt-4o-mini");
  const [rememberTranslationKey,setRememberTranslationKey]=useState(()=>loadTranslationPrefs()?.rememberSecret??false);
@@ -118,9 +128,15 @@ export function TranslationPanel(){
    return "音轨转录失败（" + transcriptionAddress + " / " + provider.transcribeModel + "）：" + message;
  };
  const checkLocalModelAccess = async () => {
-   const url = "https://huggingface.co/onnx-community/whisper-tiny.en/resolve/main/config.json";
+   let url: string;
+   try {
+     const host=new URL(modelHost);
+     if(host.protocol!=="https:"||host.username||host.password||host.search||host.hash||host.pathname!=="/")throw new Error("请选择有效的 HTTPS 模型下载域名");
+     url=host.origin+"/onnx-community/whisper-tiny.en/resolve/main/config.json";
+   }catch{setLocalModelCheck("模型下载地址无效：请填写 https:// 开头的域名，不要包含具体文件路径。");return;}
+
    setCheckingModel(true);
-   setLocalModelCheck("正在检查 Hugging Face 小型模型配置文件（不会下载模型或调用付费 API）…");
+   setLocalModelCheck("正在检查 "+new URL(url).hostname+" 的模型配置文件（不下载完整模型、不调用付费 API）…");
    try {
      const ctrl = new AbortController();
      const timeout = window.setTimeout(()=>ctrl.abort(),12000);
@@ -132,11 +148,15 @@ export function TranslationPanel(){
      if(config.model_type!=="whisper")throw new Error("收到意外的模型配置内容");
      setLocalModelCheck("✓ 模型配置文件连接正常。完整模型及运行库仍需下载，可能受到网络限制。");
    }catch(e){
-     setLocalModelCheck("✕ Hugging Face 连接失败（"+(e instanceof Error?e.message:String(e))+"）。请换个网络或在浏览器打开 huggingface.co 测试；无法在网页端绕过跨域限制。此检测没有下载完整模型，也不消耗 API 额度。");
+     setLocalModelCheck("✕ "+new URL(url).hostname+" 连接失败（"+(e instanceof Error?e.message:String(e))+"）。可能是网络或 CORS 限制。镜像站也可能关闭跨域访问；此检测未下载完整模型，不消耗 API 额度。");
    }finally{setCheckingModel(false);}
  };
  const localTranscribe = async (full: boolean) => {
    setLocalError("");
+   try {
+     const host=new URL(modelHost);
+     if(host.protocol!=="https:"||host.username||host.password||host.search||host.hash||host.pathname!=="/")throw new Error();
+   }catch{toast.error("请先选择有效的 HTTPS 模型下载域名");return;}
    const file = source.file;
    if(!file){toast.error("请先打开本地视频");return;}
    if(cues.length && !confirm("已有字幕，本次本机识别结果将替换当前字幕。建议先导出 SRT 备份，继续吗？"))return;
@@ -147,7 +167,7 @@ export function TranslationPanel(){
    const activeSession = useApp.getState().sessionId;
    try {
      const result = await transcribeLocalVideo({
-       file,signal:ctrl.signal,maxSeconds:full?Number.POSITIVE_INFINITY:120,
+       file,signal:ctrl.signal,maxSeconds:full?Number.POSITIVE_INFINITY:120,modelHost,
        onProgress:setTranscriptionProgress,
        onPartial:items=>{
          if(useApp.getState().sessionId===activeSession && !ctrl.signal.aborted) {
@@ -196,6 +216,15 @@ export function TranslationPanel(){
        <Button size="sm" disabled={busy||source.kind!=="file"} onClick={()=>void localTranscribe(false)}>免费识别前 2 分钟（先测试）</Button>
        <Button size="sm" variant="outline" disabled={busy||source.kind!=="file"} onClick={()=>void localTranscribe(true)}>免费识别整段视频</Button>
      </div>
+     <label className="block text-xs space-y-1">模型下载来源
+       <select className="w-full rounded border bg-background p-2" value={modelSource} disabled={busy||checkingModel} onChange={e=>{setModelSource(e.target.value as typeof modelSource);setLocalModelCheck("");}}>
+         <option value="official">Hugging Face 官方（huggingface.co）</option>
+         <option value="mirror">HF Mirror（hf-mirror.com，可能不支持浏览器跨域）</option>
+         <option value="custom">自定义 HTTPS 模型镜像地址</option>
+       </select>
+     </label>
+     {modelSource==="custom"&&<Input placeholder="https://你的模型镜像域名" value={customModelHost} disabled={busy||checkingModel} onChange={e=>{setCustomModelHost(e.target.value);setLocalModelCheck("");}}/>}
+     <p className="text-xs text-muted-foreground">当前下载域名：{modelHost||"未配置"}。仅向所选模型来源请求文件，不会自动切换第三方站；使用第三方来源前请确认可信度与跨域支持。</p>
      <Button size="sm" variant="ghost" disabled={busy||checkingModel} onClick={()=>void checkLocalModelAccess()}>{checkingModel?"检测中…":"检测模型下载连接（免费、小流量）"}</Button>
      {localModelCheck&&<p role="status" className="rounded border border-border p-2 text-xs break-words">{localModelCheck}</p>}
      {localError&&<p role="alert" className="rounded border border-destructive/40 p-2 text-xs break-words">上次识别失败：{localError}。若是模型下载失败，可先点击上方连接检测。已下载的部分资源可能留在浏览器缓存中。</p>}
