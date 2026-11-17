@@ -3,6 +3,22 @@ import { defaultSettings } from "./constants";
 import { uid } from "./id";
 import type { Cue, Danmaku, Segment, Settings, VideoSource } from "./types";
 
+// One-time privacy reset: previous remembered keys, endpoints and model selection
+// must not reappear merely because users opened an older deployed version.
+const PRIVACY_RESET_VERSION = "cowatch:privacy-reset:v2";
+export function resetOldCredentialsOnce(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (localStorage.getItem(PRIVACY_RESET_VERSION) === "done") return false;
+    for (const key of ["cowatch:remembered-api-key:v1", "cowatch:remember-api-key:v1", "cowatch:remembered-provider-addresses:v1"]) localStorage.removeItem(key);
+    localStorage.setItem(PRIVACY_RESET_VERSION, "done");
+    return true;
+  } catch { return false; }
+}
+// Run before Zustand initializes its API-key state.
+const oldCredentialsResetThisLoad = resetOldCredentialsOnce();
+export function needsOldCredentialMigration(): boolean { return oldCredentialsResetThisLoad; }
+
 const emptySource: VideoSource = { kind: "none", src: "", label: "", crossOrigin: false, analyzable: false };
 
 type AppState = {
