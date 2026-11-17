@@ -222,6 +222,10 @@ async function runSegment(seg: Segment, signal: AbortSignal) {
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
   });
+  // Persist each completed paid segment. A user may close the page during a
+  // long video; saving only at the end risks losing hours of generated work.
+  // IndexedDB errors are non-fatal and do not trigger another paid AI request.
+  await saveHistory().catch(() => undefined);
 }
 
 export async function saveHistory() {
