@@ -25,11 +25,17 @@ export function Player() {
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const touchStart = useRef<{ x: number; y: number; v: number; b: number; brightnessSide: boolean; changed: boolean } | null>(null);
   const seekingRef = useRef(false);
+  const lastTapRef = useRef(0);
+  const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekTrackRef = useRef<HTMLDivElement>(null);
   const [gestureHint, setGestureHint] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const isHtmlVideo = source.kind === "file" || source.kind === "url";
   const [controlsVisible, setControlsVisible] = useState(true);
+
+  useEffect(() => () => {
+    if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+  }, []);
 
   // Use page-level cinema mode rather than the browser's native Android
   // fullscreen, which can show a persistent system exit banner and hide controls.
@@ -131,6 +137,23 @@ export function Player() {
     v.currentTime = time;
     setCurrentTime(time);
     setSeekPreview(time);
+  };
+  const handleStageTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 320) {
+      lastTapRef.current = 0;
+      if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+      singleTapTimerRef.current = null;
+      togglePlayback();
+      setControlsVisible(true);
+      return;
+    }
+    lastTapRef.current = now;
+    if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+    singleTapTimerRef.current = setTimeout(() => {
+      setControlsVisible(v => !v);
+      singleTapTimerRef.current = null;
+    }, 320);
   };
   const togglePlayback = () => {
     const video = videoRef.current;
@@ -331,10 +354,10 @@ export function Player() {
           const g = touchStart.current;
           touchStart.current = null;
           setGestureHint("");
-          if (g && !g.changed) setControlsVisible(v => !v);
+          if (g && !g.changed) handleStageTap();
         }}
         onPointerCancel={() => { touchStart.current = null; setGestureHint(""); }}
-        onClick={(e) => { if ((e.nativeEvent as PointerEvent).pointerType === "mouse") setControlsVisible(v => !v); }}
+        onClick={(e) => { if ((e.nativeEvent as PointerEvent).pointerType === "mouse") handleStageTap(); }}
         className="absolute inset-0 z-30 h-full w-full cursor-default bg-transparent"
         style={{ touchAction: "none" }}
       />}
@@ -350,22 +373,44 @@ export function Player() {
           aria-valuemax={Math.max(0, duration)}
           aria-valuenow={Math.min(seekPreview ?? currentTime, Math.max(0, duration))}
           aria-valuetext={fmt(seekPreview ?? currentTime) + " / " + fmt(duration)}
-          className="group/seek relative mb-2 flex h-7 w-full cursor-pointer touch-none items-center outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+          className="group/seek relative mb-2 flex h-9 w-full cursor-pointer touch-none select-none items-center outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
           onPointerDown={(e) => {
+            if (e.pointerType === "touch") return; // Touch events have a dedicated mobile drag path.
             if (duration <= 0) return;
             seekingRef.current = true;
             e.currentTarget.setPointerCapture(e.pointerId);
             seekAt(e.clientX, e.clientY);
           }}
           onPointerMove={(e) => {
-            if (seekingRef.current) seekAt(e.clientX, e.clientY);
+            if (e.pointerType !== "touch" && seekingRef.current) seekAt(e.clientX, e.clientY);
           }}
           onPointerUp={(e) => {
-            if (seekingRef.current) seekAt(e.clientX, e.clientY);
+            if (e.pointerType !== "touch" && seekingRef.current) seekAt(e.clientX, e.clientY);
             seekingRef.current = false;
             setSeekPreview(null);
           }}
           onPointerCancel={() => { seekingRef.current = false; setSeekPreview(null); }}
+          onTouchStart={(e) => {
+            if (e.cancelable) e.preventDefault();
+            const touch = e.touches[0];
+            if (!touch) return;
+            seekingRef.current = true;
+            setControlsVisible(true);
+            seekAt(touch.clientX, touch.clientY);
+          }}
+          onTouchMove={(e) => {
+            if (e.cancelable) e.preventDefault();
+            const touch = e.touches[0];
+            if (seekingRef.current && touch) seekAt(touch.clientX, touch.clientY);
+          }}
+          onTouchEnd={(e) => {
+            if (e.cancelable) e.preventDefault();
+            const touch = e.changedTouches[0];
+            if (seekingRef.current && touch) seekAt(touch.clientX, touch.clientY);
+            seekingRef.current = false;
+            setSeekPreview(null);
+          }}
+          onTouchCancel={() => { seekingRef.current = false; setSeekPreview(null); }}
           onKeyDown={(e) => {
             if (!videoRef.current || !Number.isFinite(duration) || duration <= 0) return;
             const delta = e.key === "ArrowRight" ? 5 : e.key === "ArrowLeft" ? -5 : 0;
