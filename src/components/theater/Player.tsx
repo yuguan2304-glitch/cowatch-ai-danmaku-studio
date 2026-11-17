@@ -16,6 +16,7 @@ export function Player() {
   const resumeRef = useRef<{time:number;playing:boolean}|null>(null);
   const [fauxFullscreen, setFauxFullscreen] = useState(false);
   const [portrait, setPortrait] = useState(false);
+  const [orientationNote, setOrientationNote] = useState("");
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -28,17 +29,38 @@ export function Player() {
   // fullscreen, which can show a persistent system exit banner and hide controls.
   useEffect(() => {
     const checkPortrait = () => setPortrait(window.innerHeight > window.innerWidth);
-    const toggle = () => {
+    const toggle = async () => {
       const v = videoRef.current;
       if (v) resumeRef.current = {time:v.currentTime, playing:!v.paused};
       checkPortrait();
       setControlsVisible(true);
-      setFauxFullscreen(x => !x);
+      if (stageRef.current?.dataset.fs === "true") {
+        setFauxFullscreen(false);
+        setOrientationNote("");
+        try { screen.orientation.unlock(); } catch { /* no permission required for fallback */ }
+        return;
+      }
+      setFauxFullscreen(true);
+      // Installed Android PWAs may permit orientation.lock, unlike in-app tabs.
+      // Never trigger native requestFullscreen: it displays Android's system exit banner.
+      const orientation = screen.orientation as ScreenOrientation & { lock?: (value: "landscape") => Promise<void> };
+      if (typeof orientation?.lock === "function") {
+        try {
+          await orientation.lock("landscape");
+          setOrientationNote("");
+          checkPortrait();
+        } catch {
+          setOrientationNote("手机未允许自动横屏。请打开自动旋转，或点手机上的旋转提示按钮。");
+        }
+      } else {
+        setOrientationNote("如果画面横着显示，请开启手机自动旋转或使用系统旋转按钮。");
+      }
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
         setFauxFullscreen(false);
+        try { screen.orientation.unlock(); } catch { /* unsupported */ }
       }
     };
     checkPortrait();
@@ -79,6 +101,8 @@ export function Player() {
     }
     setControlsVisible(true);
     setFauxFullscreen(false);
+    setOrientationNote("");
+    try { screen.orientation.unlock(); } catch { /* unsupported */ }
   };
 
   const fmt = (seconds: number) => {
@@ -271,6 +295,7 @@ export function Player() {
       )}
       {fauxFullscreen && <div data-player-control aria-hidden={!controlsVisible} className={["absolute right-3 top-3 z-[70] flex flex-col items-end gap-2 transition-opacity duration-200", controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"].join(" ")}>
         <button type="button" onClick={() => void leaveCinema()} className="rounded-lg border border-white/50 bg-black/85 px-4 py-2 text-sm font-bold text-white shadow-lg" aria-label="退出横屏返回放映室"><Minimize className="mr-1 inline size-4"/>退出横屏</button>
+        {orientationNote && <span role="status" className="max-w-64 rounded-md bg-black/75 px-3 py-1.5 text-xs text-white">{orientationNote}</span>}
       </div>}
 
     </div>
