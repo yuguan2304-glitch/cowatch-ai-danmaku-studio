@@ -16,8 +16,6 @@ export function Player() {
   const resumeRef = useRef<{time:number;playing:boolean}|null>(null);
   const [fauxFullscreen, setFauxFullscreen] = useState(false);
   const [portrait, setPortrait] = useState(false);
-  const [nativeFullscreen, setNativeFullscreen] = useState(false);
-  const [fullscreenError, setFullscreenError] = useState("");
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -45,13 +43,10 @@ export function Player() {
     };
     checkPortrait();
     window.addEventListener("resize", checkPortrait);
-    const onNativeFullscreen = () => setNativeFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onNativeFullscreen);
     window.addEventListener("keydown", onKey);
     window.addEventListener("cowatch:toggle-fullscreen", toggle);
     return () => {
       window.removeEventListener("resize", checkPortrait);
-      document.removeEventListener("fullscreenchange", onNativeFullscreen);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("cowatch:toggle-fullscreen", toggle);
     };
@@ -78,35 +73,10 @@ export function Player() {
     return () => window.clearTimeout(timeout);
   }, [controlsVisible, playing, isHtmlVideo]);
 
-  const toggleControlsOnStage = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isHtmlVideo) return;
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    if (target.closest("button, input, a, select, textarea, label, [data-player-control]")) return;
-    setControlsVisible(v => !v);
-  };
-
-  const enterBrowserFullscreen = async () => {
-    const stage = stageRef.current;
-    if (!stage || !stage.requestFullscreen) {
-      setFullscreenError("当前浏览器不支持网页真全屏。推荐用 Chrome 安装「共映」后从桌面打开。");
-      return;
-    }
-    try {
-      // Only the explicit button requests fullscreen. Android can show its own
-      // one-time exit instructions; our ordinary cinema mode never does.
-      await stage.requestFullscreen({ navigationUI: "hide" });
-      setNativeFullscreen(true);
-      setFullscreenError("");
-    } catch {
-      setFullscreenError("浏览器拒绝进入真全屏。可从 Chrome 安装共映到桌面，避开浏览器地址栏。");
-    }
-  };
   const leaveCinema = async () => {
     if (document.fullscreenElement) {
       try { await document.exitFullscreen(); } catch { /* exit may be blocked */ }
     }
-    setNativeFullscreen(false);
     setControlsVisible(true);
     setFauxFullscreen(false);
   };
@@ -180,7 +150,6 @@ export function Player() {
         backgroundColor: "#000",
       } : undefined}
       data-fs={fauxFullscreen}
-      onClick={toggleControlsOnStage}
       onDragOver={(e) => {
         if (source.kind === "none") {
           e.preventDefault();
@@ -278,6 +247,14 @@ export function Player() {
         </div>
       )}
 
+      {isHtmlVideo && <button
+        type="button"
+        aria-label={controlsVisible ? "隐藏播放控制条" : "显示播放控制条"}
+        onClick={() => setControlsVisible(v => !v)}
+        className="absolute inset-0 z-30 h-full w-full cursor-default bg-transparent"
+        style={{ touchAction: "manipulation" }}
+      />}
+
       {isHtmlVideo && <div data-player-control aria-hidden={!controlsVisible} className={["absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-2 pt-8 text-white transition-opacity duration-200", !controlsVisible ? "pointer-events-none opacity-0" : "opacity-100"].join(" ")}>
         <input type="range" aria-label="视频进度" className="mb-2 w-full accent-amber-400" min={0} max={Math.max(1,duration)} step={0.1} value={Math.min(currentTime,Math.max(1,duration))} onChange={e=>{const v=videoRef.current;if(v){v.currentTime=Number(e.target.value);setCurrentTime(v.currentTime);}}}/>
         <div className="flex items-center gap-2">
@@ -294,8 +271,6 @@ export function Player() {
       )}
       {fauxFullscreen && <div data-player-control aria-hidden={!controlsVisible} className={["absolute right-3 top-3 z-[70] flex flex-col items-end gap-2 transition-opacity duration-200", controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"].join(" ")}>
         <button type="button" onClick={() => void leaveCinema()} className="rounded-lg border border-white/50 bg-black/85 px-4 py-2 text-sm font-bold text-white shadow-lg" aria-label="退出横屏返回放映室"><Minimize className="mr-1 inline size-4"/>退出横屏</button>
-        {!nativeFullscreen && <button type="button" onClick={() => void enterBrowserFullscreen()} className="rounded-lg border border-amber-400/80 bg-black/85 px-3 py-2 text-xs font-semibold text-amber-300">隐藏浏览器顶部</button>}
-        {fullscreenError && <span role="status" className="max-w-56 rounded bg-black/85 px-2 py-1 text-xs text-white">{fullscreenError}</span>}
       </div>}
 
     </div>
