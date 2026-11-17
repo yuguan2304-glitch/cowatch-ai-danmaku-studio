@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { TranslationPanel } from "@/components/theater/TranslationPanel";
 import { ModelPicker } from "@/components/theater/ModelPicker";
 import { CommentSection } from "@/components/theater/CommentSection";
+import { SavedTheater } from "@/components/theater/SavedTheater";
 
 export const Route = createFileRoute("/")({ component: Index });
 export function Index() {
@@ -55,7 +56,7 @@ export function Index() {
   return <main className="mx-auto max-w-[1440px] space-y-4 p-3 sm:p-6">
     <div><h1 className="font-display text-2xl font-bold">AI 弹幕放映室</h1><p className="text-sm text-muted-foreground">选一部视频，邀请你的虚拟观众。所有 AI 弹幕均为模拟内容。</p></div>
     <div className="space-y-4">
-      <div className="min-w-0 space-y-3"><SourceBar/><Player/><CommentSection/>
+      <div className="min-w-0 space-y-3"><SourceBar/><div id="cowatch-player-top"><Player/></div><CommentSection/><SavedTheater/>
       </div>
       {settingsOpen && <div className="fixed inset-0 z-[150] bg-black/65" onClick={()=>setSettingsOpen(false)} aria-hidden="true"/>}
       <aside role="dialog" aria-modal={settingsOpen} aria-label="共映设置侧栏" aria-hidden={!settingsOpen} className={["fixed right-0 top-0 z-[160] flex h-[100dvh] w-[min(92vw,440px)] flex-col border-l border-border bg-background shadow-2xl transition-transform duration-200",settingsOpen?"translate-x-0":"translate-x-full pointer-events-none"].join(" ")}>
