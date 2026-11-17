@@ -2,7 +2,6 @@ import type { SavedScreening } from "./types";
 
 const MAGIC = "COWATCHPACK1\n";
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 
 /** One downloadable package: small JSON metadata header + original video bytes.
  * No compression or base64 copying of the video is required.
