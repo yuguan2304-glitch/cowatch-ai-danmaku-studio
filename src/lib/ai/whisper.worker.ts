@@ -4,6 +4,26 @@ import { pipeline, env } from "@huggingface/transformers";
 
 env.allowRemoteModels = true;
 env.useBrowserCache = true;
+// Show the failing resource's host instead of the opaque "Failed to fetch".
+// Do not alter headers, credentials or network destinations.
+let failedResource = "";
+const originalFetch = globalThis.fetch.bind(globalThis);
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  let label = "未知资源";
+  try {
+    const uri = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const parsed = new URL(uri, self.location.href);
+    label = parsed.hostname + parsed.pathname.slice(-90);
+  } catch { /* ignore */ }
+  try {
+    const response = await originalFetch(input, init);
+    if (!response.ok) failedResource = label + " (HTTP " + response.status + ")";
+    return response;
+  } catch (error) {
+    failedResource = label;
+    throw error;
+  }
+}) as typeof fetch;
 
 type Recognizer = (audio: Float32Array, options: Record<string, unknown>) => Promise<unknown>;
 let recognizer: Recognizer | null = null;
@@ -43,6 +63,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         : [];
     self.postMessage({kind: "result", id: data.id, cues});
   } catch (error) {
-    self.postMessage({kind: "error", id: data.kind === "recognize" ? data.id : -1, message: error instanceof Error ? error.message : String(error)});
+    self.postMessage({kind: "error", id: data.kind === "recognize" ? data.id : -1, message: (() => {
+      const msg = error instanceof Error ? error.message : String(error);
+      return /Failed to fetch|NetworkError|fetch failed/i.test(msg)
+        ? "模型资源下载失败：" + (failedResource || "未知资源") +
+          "。可能是模型网站/CDN 无法访问、跨域限制或网络中断。未调用付费转录 API。"
+        : msg;
+    })()});
   }
 };
