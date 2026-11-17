@@ -12,13 +12,13 @@ import type { Cue } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { ModelPicker } from "@/components/theater/ModelPicker";
 import { useSubtitleDisplay } from "@/lib/subtitle-display";
-import { transcribe } from "@/lib/ai/openai";
-import { TRANSCRIBE_MAX_BYTES } from "@/lib/constants";
+import { transcribeVideoWithAudioChunks } from "@/lib/ai/video-transcribe";
 type Translated = { index:number; text:string };
 function stamp(n:number){const ms=Math.max(0,Math.round(n*1000));return [Math.floor(ms/3600000),Math.floor(ms/60000)%60,Math.floor(ms/1000)%60].map(x=>String(x).padStart(2,"0")).join(":")+","+String(ms%1000).padStart(3,"0");}
 export function TranslationPanel(){
  const cues=useApp(s=>s.cues), comments=useApp(s=>s.danmaku), provider=useApp(s=>s.settings.provider), session=useApp(s=>s.sessionId), source=useApp(s=>s.source), key=useSecrets(s=>s.apiKey), transcriptionKey=useSecrets(s=>s.transcribeKey);
  const [service,setService]=useState<"google"|"custom"|"shared">("shared");
+ const [transcriptionProgress,setTranscriptionProgress]=useState("");
  const [translationKey,setTranslationKey]=useState(""),[translationUrl,setTranslationUrl]=useState("https://api.openai.com/v1"),[translationModel,setTranslationModel]=useState("gpt-4o-mini");
  const [target,setTarget]=useState("简体中文"),[glossary,setGlossary]=useState(""),[commentTranslations,setCommentTranslations]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[time,setTime]=useState(0);
  const mode=useSubtitleDisplay(s=>s.mode),setMode=useSubtitleDisplay(s=>s.setMode),translated=useSubtitleDisplay(s=>s.translated),setTranslated=useSubtitleDisplay(s=>s.setTranslated),mergeTranslated=useSubtitleDisplay(s=>s.mergeTranslated);
@@ -76,29 +76,30 @@ export function TranslationPanel(){
  const extractAudioSubtitles=async()=>{
    const file=source.file;
    if(!file){toast.error("请先打开本地视频文件");return;}
-   if(file.size>TRANSCRIBE_MAX_BYTES){toast.error("当前音轨转录接口只能直接处理不超过 25MB 的视频文件。可以先导入字幕，或截取视频后再试。");return;}
    const baseUrl=provider.transcribeBaseUrl;
    const checked=checkBaseUrl(baseUrl);
    if(!checked.ok){toast.error(checked.reason);return;}
    const transKey=provider.transcribeUseMainKey?key:transcriptionKey;
    if(!transKey){toast.error("尚未配置转录接口密钥。请展开「AI 接口设置 → 音轨转录接口」；如果中转站不支持音轨转录，建议直接导入 SRT/VTT。");return;}
-   if(!confirm("将完整文件「"+file.name+"」上传到 "+checked.url.host+" 转成带时间戳的字幕，可能产生 API 费用。继续？"))return;
+   const large=file.size>25*1024*1024;
+   if(!confirm(large?"将从视频中实时提取压缩音频，再分段上传到 "+checked.url.host+" 转录。大致需要视频自身的时长，请保持共映在前台，可能产生 API 费用。继续？":"将视频「"+file.name+"」发送到 "+checked.url.host+" 转录，可能产生 API 费用。继续？"))return;
    const ctrl=new AbortController();abort.current=ctrl;setBusy(true);
    try{
-     const result=await transcribe({baseUrl,apiKey:transKey,model:provider.transcribeModel,file,signal:ctrl.signal});
+     const result=await transcribeVideoWithAudioChunks({baseUrl,apiKey:transKey,model:provider.transcribeModel,file,signal:ctrl.signal,onProgress:setTranscriptionProgress});
      if(!result.timestamped){toast.error("转录结果没有时间戳，无法自动与视频对齐。请改用支持时间戳的模型。");return;}
      useApp.getState().setCues(result.cues,"AI 音轨转录");
      toast.success("提取成功！已得到 "+result.cues.length+" 段字幕。接下来点击「翻译视频字幕」。");
    }catch(e){if(!ctrl.signal.aborted)toast.error(e instanceof Error?e.message:String(e));}
-   finally{setBusy(false);if(abort.current===ctrl)abort.current=null;}
+   finally{setBusy(false);setTranscriptionProgress("");if(abort.current===ctrl)abort.current=null;}
  };
  const exportSrt=()=>{const rows=cues.map((c:Cue,i)=>[i+1,stamp(c.start)+" --> "+stamp(c.end),mode==="original"?c.text:mode==="both"?[c.text,translated[i]].filter(Boolean).join("\n"):translated[i]??c.text].join("\n"));downloadText("cowatch-subtitles.srt",rows.join("\n\n"),"text/plain");};
- return <details id="video-translation" className="panel scroll-mt-16 space-y-3 p-3"><summary className="cursor-pointer font-bold">🎞️ 视频 AI 字幕翻译</summary><p className="text-xs text-muted-foreground">更省事的做法：优先复用已能生成弹幕的 AI 接口翻译字幕，不必再填第二套翻译密钥。没有字幕时，先导入 SRT/VTT，或者尝试从本地短视频转录。转录、翻译可能分别收费。详细流程：① 导入 SRT/VTT 字幕，或在上方「音轨转录」获取带时间戳的字幕（目前限 25MB 本地文件且转录接口需支持时间戳）；② 选择翻译服务并翻译字幕；③ 在视频画面内显示原文 / 译文 / 双语，横屏全屏时也会保留。字幕翻译与弹幕生成分开计费，译文优先使用本地缓存。</p>
+ return <details id="video-translation" className="panel scroll-mt-16 space-y-3 p-3"><summary className="cursor-pointer font-bold">🎞️ 视频 AI 字幕翻译</summary><p className="text-xs text-muted-foreground">视频翻译先转录声音，再翻译字幕。大于 25MB 的本地视频会在手机端实时提取并压缩音轨、分段上传，不直接上传整段视频；大致需要视频自身时长，期间请保持共映在前台。转录模型必须支持带时间戳的结果，可能产生费用。已有 SRT/VTT 字幕时可直接导入并翻译。</p>
  <div className="rounded-lg border border-primary/30 bg-secondary/20 p-3 space-y-2">
    <p className="font-semibold text-sm">① 取得视频字幕</p>
    <p className="text-xs text-muted-foreground">{cues.length?("已准备 "+cues.length+" 段字幕，可以直接进行下一步。"):"还没有字幕。可在视频上方导入 SRT/VTT，或从本地短视频提取音轨字幕。"}</p>
-   <Button size="sm" variant="outline" disabled={busy||source.kind!=="file"||!!cues.length} onClick={()=>void extractAudioSubtitles()}>从本地视频 AI 提取字幕（25MB 内）</Button>
-   <p className="text-xs text-muted-foreground">这是调用转录服务，并非由弹幕模型自动听音。需要在 AI 接口的「音轨转录接口」配置支持时间戳的模型；较长视频请优先导入字幕。</p>
+   <Button size="sm" variant="outline" disabled={busy||source.kind!=="file"||!!cues.length} onClick={()=>void extractAudioSubtitles()}>从本地视频提取并 AI 转录字幕</Button>
+   <p className="text-xs text-muted-foreground">大视频会先在本机实时生成小音频文件，再调用转录接口。十几分钟视频可能需要十几分钟，请保持应用在前台；若浏览器无法提取音轨，可改为导入 SRT/VTT。</p>
+   {transcriptionProgress&&<p role="status" className="text-xs text-primary">{transcriptionProgress}</p>}
    </div>
    <p className="font-semibold text-sm">② 选择翻译方式</p>
    <label className="block text-sm">翻译服务<select className="w-full rounded border bg-background p-2" disabled={busy} value={service} onChange={e=>{setTranslationKey("");setService(e.target.value as typeof service);}}><option value="custom">独立 OpenAI 兼容 API</option><option value="google">Google Cloud Translation</option><option value="shared">复用弹幕 AI 接口</option></select></label>
