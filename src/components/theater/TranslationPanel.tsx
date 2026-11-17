@@ -35,11 +35,11 @@ export function TranslationPanel(){
    const apiKey=service==="shared"?key:translationKey;
    const model=service==="custom"?translationModel:provider.model;
    const checked=checkBaseUrl(baseUrl);
-   if(!checked.ok)return toast.error("翻译 API 地址无效");
-   if(service==="shared"&&provider.kind!=="openai")return toast.error("复用模式目前仅支持 OpenAI 兼容接口；请选择独立翻译接口");
-   if(!apiKey)return toast.error("请先填写翻译 API 密钥");
+   if(!checked.ok){toast.error("翻译 API 地址无效");return;}
+   if(service==="shared"&&provider.kind!=="openai"){toast.error("复用模式目前仅支持 OpenAI 兼容接口；请选择独立翻译接口");return;}
+   if(!apiKey){toast.error("请先填写翻译 API 密钥");return;}
    const input=kind==="cues"?cues.map((c,i)=>({index:i,text:c.text})).filter(c=>translated[c.index]===undefined):comments.map((c,i)=>({index:i,text:c.text,id:c.id})).filter(c=>commentTranslations[c.id]===undefined);
-   if(!input.length)return toast.info("没有待翻译内容");
+   if(!input.length){toast.info("没有待翻译内容");return;}
    if(!confirm("将文本"+(service==="google"?"":"与术语表")+"发送给 "+checked.url.host+"，可能产生 API 费用，继续？"))return;
    const ctrl=new AbortController();abort.current=ctrl;setBusy(true);
    try{
@@ -64,7 +64,7 @@ export function TranslationPanel(){
        if(!valid.length)throw new Error("没有有效译文");
        for(const x of valid){const item=part.find(p=>p.index===x.index);if(item)writeCache(cacheId(kind,item.text),x.text);}
        if(kind==="cues")setTranslated(old=>({...old,...Object.fromEntries(valid.map(x=>[x.index,x.text]))}));
-       else setCommentTranslations(old=>({...old,...Object.fromEntries(valid.map(x=>[comments[x.index].id,x.text]))}));
+       else setCommentTranslations(old=>({...old,...Object.fromEntries(valid.map(x=>[comments[x.index]?.id ?? "",x.text]))}));
      }toast.success("本轮翻译完成，可重试缺失项");
    }catch(e){if(!ctrl.signal.aborted)toast.error((e as Error).message);}finally{setBusy(false);if(abort.current===ctrl)abort.current=null;}
  };
@@ -78,7 +78,7 @@ export function TranslationPanel(){
  <label className="block text-sm">术语表（人名、角色名、圈内梗）<Textarea disabled={busy} value={glossary} onChange={e=>setGlossary(e.target.value)} placeholder="例如：原词 = 译名"/></label>
  <div className="flex flex-wrap gap-2"><Button size="sm" disabled={busy||!cues.length} onClick={()=>void run("cues")}>翻译字幕</Button><Button size="sm" disabled={busy||!comments.length} onClick={()=>void run("comments")}>翻译弹幕文本</Button>{busy&&<Button size="sm" variant="outline" onClick={()=>abort.current?.abort()}>取消</Button>}<Button size="sm" variant="outline" disabled={!cues.length} onClick={exportSrt}>导出 SRT</Button></div>
  <label className="block text-sm">字幕显示 <select className="rounded border bg-background p-1" value={mode} onChange={e=>setMode(e.target.value as typeof mode)}><option value="both">双语</option><option value="original">原文</option><option value="translated">译文</option><option value="off">关闭</option></select></label>
- {mode!=="off"&&<div className="min-h-14 rounded bg-black p-2 text-center text-white">{active>=0&&<>{mode!=="translated"&&<div>{cues[active].text}</div>}{mode!=="original"&&<div>{translated[active]??(mode==="translated"?cues[active].text:"")}</div>}</>}</div>}
+ {mode!=="off"&&<div className="min-h-14 rounded bg-black p-2 text-center text-white">{active>=0&&<>{mode!=="translated"&&<div>{cues[active]?.text}</div>}{mode!=="original"&&<div>{translated[active]??(mode==="translated"?cues[active]?.text:"")}</div>}</>}</div>}
  <details><summary className="text-sm">字幕译文编辑 · {Object.keys(translated).length}/{cues.length}</summary><div className="max-h-64 space-y-2 overflow-auto">{cues.map((c,i)=><label key={i} className="block text-xs">{c.text}<Textarea value={translated[i]??""} disabled={busy} onChange={e=>{writeCache(cacheId("cues",c.text),e.target.value);setTranslated(old=>({...old,[i]:e.target.value}));}}/></label>)}</div></details>
  <details><summary className="text-sm">弹幕译文 · {Object.keys(commentTranslations).length}/{comments.length}</summary><div className="max-h-64 overflow-auto">{comments.filter(c=>commentTranslations[c.id]).map(c=><p key={c.id} className="border-b py-1 text-sm">{c.text} → {commentTranslations[c.id]}</p>)}</div></details>
  </section>;
