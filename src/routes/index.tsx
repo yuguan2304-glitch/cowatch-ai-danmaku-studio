@@ -26,6 +26,9 @@ export function Index() {
   const setKey = useSecrets(x => x.setApiKey);
   const transcribeKey = useSecrets(x => x.transcribeKey);
   const setTranscribeKey = useSecrets(x => x.setTranscribeKey);
+  const rememberKey = useSecrets(x => x.rememberKey);
+  const setRememberKey = useSecrets(x => x.setRememberKey);
+  const clearKeys = useSecrets(x => x.clearKeys);
   const [testing,setTesting] = useState(false);
   const [testResult,setTestResult] = useState("");
   const p=s.settings.provider, a=s.settings.audience, g=s.settings.generation, an=s.settings.analysis;
@@ -59,7 +62,9 @@ export function Index() {
           <label className="block text-sm">接口类型 <select className="w-full rounded border bg-background p-2" value={p.kind} onChange={e=>{setKey("");s.update("provider",{kind:e.target.value==="gemini"?"gemini":"openai"});}}><option value="openai">OpenAI 兼容</option><option value="gemini">Gemini 原生</option></select></label>
           <label className="block text-sm">API 地址<Input value={p.baseUrl} onChange={e=>{setKey("");s.update("provider",{baseUrl:e.target.value});}}/></label>
           <ModelPicker kind={p.kind} baseUrl={p.baseUrl} apiKey={key} model={p.model} onModelChange={model=>s.update("provider",{model})}/>
-          <label className="block text-sm">API 密钥<Input type="password" autoComplete="off" value={key} onChange={e=>setKey(e.target.value)}/></label>
+          <label className="block text-sm">API 密钥<Input type="password" name="cowatch-temp-api-secret" autoComplete="new-password" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
+          <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={rememberKey} onChange={e=>setRememberKey(e.target.checked)}/> <span>记住此设备上的 API 密钥（可选）<span className="block text-xs text-muted-foreground">默认不记住，刷新或重新打开页面需要再次填写。勾选后密钥会以未加密形式保存在本设备浏览器中，请勿在共享设备启用。</span></span></label>
+          <Button size="sm" variant="outline" type="button" onClick={()=>{clearKeys();setTestResult("");toast.success("已清除本站记住的密钥及当前会话密钥");}}>清除全部密钥</Button>
           {p.kind==="gemini"?<label className="block text-sm">输入方式 <select className="w-full rounded border bg-background p-2" value={p.geminiInput} onChange={e=>s.update("provider",{geminiInput:e.target.value==="video"?"video":"frames"})}><option value="frames">抽帧</option><option value="video">原生视频（小文件）</option></select></label>:<label className="flex gap-2 text-sm"><input type="checkbox" checked={p.jsonMode} onChange={e=>s.update("provider",{jsonMode:e.target.checked})}/>要求 JSON 模式</label>}
           <Button disabled={testing} onClick={()=>void test()}>{testing?"测试中…":"测试连接"}</Button>
           {testResult&&<div role="status" className="rounded border border-border bg-secondary/40 p-3 text-xs break-words">{testResult}</div>}

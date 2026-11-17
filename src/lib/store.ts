@@ -100,17 +100,59 @@ export const useApp = create<AppState>((set) => ({
     set({ sessionId, danmaku, demo, restoredLabel: label, segments: [] }),
 }));
 
-/** API keys: memory only. Never persisted, never logged. Cleared on reload. */
+/**
+ * API keys are memory-only by default. Persistent storage is strictly opt-in.
+ * When opted in, the key is stored unencrypted in localStorage ON THIS DEVICE.
+ * Never include keys in IndexedDB settings/history or share links.
+ */
+const SECRET_STORAGE = "cowatch:remembered-api-key:v1";
+const REMEMBER_STORAGE = "cowatch:remember-api-key:v1";
+
+function rememberedSecrets(): { apiKey: string; rememberKey: boolean } {
+  if (typeof window === "undefined") return { apiKey: "", rememberKey: false };
+  try {
+    const rememberKey = localStorage.getItem(REMEMBER_STORAGE) === "yes";
+    return { rememberKey, apiKey: rememberKey ? (localStorage.getItem(SECRET_STORAGE) ?? "") : "" };
+  } catch { return { apiKey: "", rememberKey: false }; }
+}
+function persistSecret(key: string, remember: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    if (remember) {
+      localStorage.setItem(REMEMBER_STORAGE, "yes");
+      if (key) localStorage.setItem(SECRET_STORAGE, key);
+      else localStorage.removeItem(SECRET_STORAGE);
+    } else {
+      localStorage.removeItem(REMEMBER_STORAGE);
+      localStorage.removeItem(SECRET_STORAGE);
+    }
+  } catch { /* Storage may be unavailable. The in-memory key still works. */ }
+}
+
 type SecretState = {
   apiKey: string;
   transcribeKey: string;
+  rememberKey: boolean;
   setApiKey: (k: string) => void;
   setTranscribeKey: (k: string) => void;
+  setRememberKey: (remember: boolean) => void;
+  clearKeys: () => void;
 };
 
-export const useSecrets = create<SecretState>((set) => ({
-  apiKey: "",
+export const useSecrets = create<SecretState>((set, get) => ({
+  ...rememberedSecrets(),
   transcribeKey: "",
-  setApiKey: (apiKey) => set({ apiKey }),
+  setApiKey: (apiKey) => {
+    persistSecret(apiKey, get().rememberKey);
+    set({ apiKey });
+  },
   setTranscribeKey: (transcribeKey) => set({ transcribeKey }),
+  setRememberKey: (rememberKey) => {
+    persistSecret(get().apiKey, rememberKey);
+    set({ rememberKey });
+  },
+  clearKeys: () => {
+    persistSecret("", false);
+    set({ apiKey: "", transcribeKey: "", rememberKey: false });
+  },
 }));
