@@ -38,6 +38,17 @@ export function TranslationPanel(){
  const [rememberTranslationKey,setRememberTranslationKey]=useState(()=>loadTranslationPrefs()?.rememberSecret??false);
  const [rememberTranscription,setRememberTranscription]=useState(()=>loadTranscriptionPrefs()!==null);
  const [rememberTranscriptionKey,setRememberTranscriptionKey]=useState(()=>loadTranscriptionPrefs()?.rememberSecret??false);
+ const [transcribePreset,setTranscribePreset]=useState<"groq"|"shared"|"custom">(()=>{
+   try {
+     const saved=localStorage.getItem("cowatch:transcribe-preset:v1");
+     return saved==="shared"||saved==="custom"?saved:"groq";
+   }catch{return "groq";}
+ });
+ useEffect(()=>{
+   try {localStorage.setItem("cowatch:transcribe-preset:v1",transcribePreset);}catch{/* private browsing */}
+ },[transcribePreset]);
+ const groqBaseUrl="https://api.groq.com/openai/v1";
+ const groqModel="whisper-large-v3-turbo";
  const settingsLoaded=useApp(s=>s.settingsLoaded);
  const [target,setTarget]=useState(()=>loadTranslationPrefs()?.target??"简体中文"),[glossary,setGlossary]=useState(()=>loadTranslationPrefs()?.glossary??""),[commentTranslations,setCommentTranslations]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[time,setTime]=useState(0);
  const mode=useSubtitleDisplay(s=>s.mode),setMode=useSubtitleDisplay(s=>s.setMode),translated=useSubtitleDisplay(s=>s.translated),setTranslated=useSubtitleDisplay(s=>s.setTranslated),mergeTranslated=useSubtitleDisplay(s=>s.mergeTranslated);
@@ -61,12 +72,12 @@ export function TranslationPanel(){
    if(!settingsLoaded||!restoredTranscription.current)return;
    if(rememberTranscription){
      saveTranscriptionPrefs({address:provider.transcribeBaseUrl,model:provider.transcribeModel,useMainKey:provider.transcribeUseMainKey,rememberSecret:rememberTranscriptionKey});
-     saveTranscriptionKey(transcriptionKey,rememberTranscriptionKey&&!provider.transcribeUseMainKey);
+     saveTranscriptionKey(transcriptionKey,rememberTranscriptionKey&&(transcribePreset==="groq"||!provider.transcribeUseMainKey));
    }else{
      try {localStorage.removeItem("cowatch:transcription-remember:v1");}catch{/* private mode */}
      saveTranscriptionKey("",false);
    }
- },[settingsLoaded,rememberTranscription,rememberTranscriptionKey,provider.transcribeBaseUrl,provider.transcribeModel,provider.transcribeUseMainKey,transcriptionKey]);
+ },[settingsLoaded,rememberTranscription,rememberTranscriptionKey,provider.transcribeBaseUrl,provider.transcribeModel,provider.transcribeUseMainKey,transcriptionKey,transcribePreset]);
  useEffect(()=>{setTranslated({});abort.current?.abort();},[cues,target,session]);
  useEffect(()=>{setCommentTranslations({});abort.current?.abort();},[target,session]);
  useEffect(()=>{const timer=window.setInterval(()=>setTime(getClock()?.getTime()??0),200);return()=>{clearInterval(timer);abort.current?.abort();};},[]);
@@ -186,17 +197,7 @@ export function TranslationPanel(){
    }finally{setBusy(false);setTranscriptionProgress("");if(abort.current===ctrl)abort.current=null;}
  };
  const [cloudSample,setCloudSample]=useState(true);
- const [transcribePreset,setTranscribePreset]=useState<"groq"|"shared"|"custom">(()=>{
-   try {
-     const saved=localStorage.getItem("cowatch:transcribe-preset:v1");
-     return saved==="shared"||saved==="custom"?saved:"groq";
-   }catch{return "groq";}
- });
- useEffect(()=>{
-   try {localStorage.setItem("cowatch:transcribe-preset:v1",transcribePreset);}catch{/* private browsing */}
- },[transcribePreset]);
- const groqBaseUrl="https://api.groq.com/openai/v1";
- const groqModel="whisper-large-v3-turbo";
+
  const extractAudioSubtitles=async()=>{
    const file=source.file;
    if(!file){toast.error("请先打开本地视频文件");return;}
