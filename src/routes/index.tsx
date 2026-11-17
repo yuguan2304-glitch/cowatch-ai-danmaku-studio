@@ -22,6 +22,7 @@ import { ModelPicker } from "@/components/theater/ModelPicker";
 import { CommentSection } from "@/components/theater/CommentSection";
 import { SavedTheater } from "@/components/theater/SavedTheater";
 import { ShipControls } from "@/components/theater/ShipControls";
+import { WorldBookImport } from "@/components/theater/WorldBookImport";
 
 export const Route = createFileRoute("/")({ component: Index });
 export function Index() {
@@ -100,12 +101,11 @@ export function Index() {
             <p className="text-xs text-muted-foreground">**活人感建议：**用 [观众:昵称] 固定这位观众的口癖和反应习惯；[*] 表示所有观众适用；[角色名] 仅当标题或当前字幕提及角色时触发。每行一条，单次最多采用 12 条、1200 字。别把示例当成视频中真实发生的事。</p>
             <Textarea rows={7} value={a["worldBook"] ?? ""} disabled={s.generating} placeholder={"[观众:老粉] 看见熟悉操作会先调侃两句，偶尔打个（）\n[观众:考据党] 喜欢短短补充来历，平时说话比较克制\n[Dream] 可以玩 Dream 爱炫耀的梗，但不能编造实际台词\n[*] 观众发言要有长短差异，不要所有人统一句式"} onChange={e=>s.update("audience",{worldBook:e.target.value.slice(0,50000)})}/>
             <div className="flex flex-wrap gap-2">
-              <label className="rounded-md border px-2 py-1 text-sm cursor-pointer">导入 TXT / MD / JSON
-                <input type="file" accept=".txt,.md,.json,text/plain,application/json" className="hidden" disabled={s.generating} onChange={async e=>{const f=e.target.files?.[0];e.target.value="";if(!f)return;try{if(f.size>150000){toast.error("世界书文件最大 150KB");return;}let raw=await f.text();if(f.name.toLowerCase().endsWith(".json")){const data:unknown=JSON.parse(raw);if(typeof data==="string")raw=data;else if(Array.isArray(data))raw=data.map(v=>typeof v==="string"?v:(v&&typeof v==="object"?"["+String((v as Record<string,unknown>)["keyword"]??(v as Record<string,unknown>)["key"]??"*")+"] "+String((v as Record<string,unknown>)["content"]??(v as Record<string,unknown>)["text"]??""):"")).join("\n");else if(data&&typeof data==="object"){const ob=data as Record<string,unknown>;raw=typeof ob["content"]==="string"?ob["content"]:typeof ob["worldBook"]==="string"?ob["worldBook"]:JSON.stringify(data);}else throw new Error("世界书 JSON 格式无法读取");}if((a["worldBook"]??"").trim()&&!confirm("合并到已有世界书末尾？取消则不导入。"))return;s.update("audience",{worldBook:[a["worldBook"],raw].filter(Boolean).join("\n").slice(0,50000)});toast.success("世界书导入成功，已保存到本机设置");}catch(err){toast.error("导入失败："+(err instanceof Error?err.message:String(err)));}}}/>
-              </label>
+
               <Button size="sm" variant="outline" disabled={!(a["worldBook"]??"").trim()} onClick={()=>downloadText("cowatch-worldbook.txt",a["worldBook"]??"","text/plain")}>导出备份</Button>
               <Button size="sm" variant="ghost" disabled={s.generating||!(a["worldBook"]??"").trim()} onClick={()=>{if(confirm("清空世界书？建议先导出备份。"))s.update("audience",{worldBook:""});}}>清空</Button>
             </div>
+            <WorldBookImport/>
             <p className="text-xs text-muted-foreground">世界书只在这台设备保存，不同步到其他设备。导入的内容可能发送给你选择的 AI API 服务商。请勿放入私人密码或 API 密钥。</p>
           </details>
           <label className="block text-sm">额外要求（人物、圈内梗、偏好）<Textarea value={a.extraPrompt} onChange={e=>s.update("audience",{extraPrompt:e.target.value})}/></label>

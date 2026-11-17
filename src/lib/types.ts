@@ -31,6 +31,8 @@ export type AudienceConfig = {
   extraPrompt: string;
   /** Optional local world book. Only relevant short lines are sent to AI. */
   worldBook?: string;
+  /** Imported structured world books are stored privately on this device. */
+  worldBookEntries?: import("./worldbook-import").ImportedWorldEntry[];
   /** Custom viewer speech styles: one style per line, may include examples. */
   customTones?: string;
   /** Direction-aware ship rules; order is meaningful only for fixed mode. */
