@@ -202,7 +202,7 @@ export function TranslationPanel(){
      :"将视频「"+file.name+"」发送到 "+checked.url.host+" 转录，可能产生费用。继续？"))return;
    const ctrl=new AbortController();abort.current=ctrl;setBusy(true);
    try{
-     const result=await transcribeVideoWithAudioChunks({baseUrl,apiKey:transKey,model:provider.transcribeModel,file,signal:ctrl.signal,maxSeconds:cloudSample?30:undefined,onProgress:setTranscriptionProgress});
+     const result=await transcribeVideoWithAudioChunks({baseUrl,apiKey:transKey,model:provider.transcribeModel,file,signal:ctrl.signal,...(cloudSample?{maxSeconds:30}:{}),onProgress:setTranscriptionProgress});
      if(!result.timestamped){toast.error("转录结果没有时间戳，无法自动与视频对齐。请改用支持时间戳的模型。");return;}
      useApp.getState().setCues(result.cues,cloudSample?"云端转录测试（前30秒）":"AI 音轨转录");
      toast.success("提取成功！已得到 "+result.cues.length+" 段字幕。接下来点击「翻译视频字幕」。");
