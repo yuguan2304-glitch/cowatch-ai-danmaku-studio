@@ -1,14 +1,15 @@
 import { useEffect } from "react";
-import { useApp } from "./store";
+import { useApp, rememberedProviderAddresses, syncRememberedProviderAddresses } from "./store";
 import { db } from "./db";
 import { defaultSettings } from "./constants";
 import type { Settings } from "./types";
 
 function merge(saved: Partial<Settings> | undefined): Settings {
   const d = defaultSettings();
-  if (!saved) return d;
+  const addresses = rememberedProviderAddresses();
+  if (!saved) return {...d,provider:{...d.provider,...addresses}};
   return {
-    provider: { ...d.provider, ...saved.provider },
+    provider: { ...d.provider, ...saved.provider, baseUrl: addresses.baseUrl ?? d.provider.baseUrl, transcribeBaseUrl: addresses.transcribeBaseUrl ?? d.provider.transcribeBaseUrl },
     analysis: { ...d.analysis, ...saved.analysis },
     generation: { ...d.generation, ...saved.generation },
     audience: { ...d.audience, ...saved.audience },
@@ -30,7 +31,12 @@ export function useBootstrapSettings() {
         unsub = useApp.subscribe((st, prev) => {
           if (st.settings === prev.settings) return;
           clearTimeout(timer);
-          timer = setTimeout(() => void db.saveSettings(st.settings).catch(() => undefined), 400);
+          syncRememberedProviderAddresses();
+          timer = setTimeout(() => {
+            const defaults = defaultSettings().provider;
+            const safeSettings: Settings = {...st.settings, provider: {...st.settings.provider, baseUrl: defaults.baseUrl, transcribeBaseUrl: defaults.transcribeBaseUrl}};
+            void db.saveSettings(safeSettings).catch(() => undefined);
+          }, 400);
         });
       });
     return () => {
