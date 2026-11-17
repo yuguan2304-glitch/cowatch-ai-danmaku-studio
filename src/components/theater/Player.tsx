@@ -291,7 +291,7 @@ export function Player() {
           if(g.x<rect.left+rect.width/2) setBrightness(Math.max(0.15,Math.min(1,g.b+delta)));
           else if(videoRef.current){videoRef.current.volume=Math.max(0,Math.min(1,g.v+delta));videoRef.current.muted=false;}
           setControlsVisible(true);
-        }
+        }}
         className="absolute inset-0 z-30 h-full w-full cursor-default bg-transparent"
         style={{ touchAction: "manipulation" }}
       />}
