@@ -5,7 +5,7 @@ import { uid } from "../id";
 export function extractJson(text: string): unknown {
   const trimmed = text.trim();
   const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const body = fence ? fence[1].trim() : trimmed;
+  const body = fence ? (fence[1] ?? "").trim() : trimmed;
   try {
     return JSON.parse(body);
   } catch {
@@ -64,7 +64,7 @@ export function validateDanmaku(raw: unknown, opts: ValidateOptions): ValidateRe
   if (Array.isArray(raw)) list = raw;
   else if (raw && typeof raw === "object") {
     const obj = raw as Record<string, unknown>;
-    const arr = obj.danmaku ?? obj.comments ?? obj.items ?? obj.data;
+    const arr = obj["danmaku"] ?? obj["comments"] ?? obj["items"] ?? obj["data"];
     if (Array.isArray(arr)) list = arr;
   }
   const seen = new Set(opts.existing.map((d) => normalizeText(d.text)));
@@ -76,8 +76,8 @@ export function validateDanmaku(raw: unknown, opts: ValidateOptions): ValidateRe
       continue;
     }
     const e = entry as Record<string, unknown>;
-    const time = toSeconds(e.time);
-    const text = typeof e.text === "string" ? e.text.replace(/\s+/g, " ").trim() : "";
+    const time = toSeconds(e["time"]);
+    const text = typeof e["text"] === "string" ? e["text"].replace(/\s+/g, " ").trim() : "";
     if (time === null || !text || text.length > maxLength) {
       rejected.invalid++;
       continue;
@@ -101,8 +101,8 @@ export function validateDanmaku(raw: unknown, opts: ValidateOptions): ValidateRe
       continue;
     }
     seen.add(norm);
-    const color = typeof e.color === "string" && HEX.test(e.color.trim()) ? e.color.trim().toUpperCase() : "#FFFFFF";
-    const viewer = typeof e.viewer === "string" && e.viewer.trim() ? e.viewer.trim().slice(0, 24) : "路人";
+    const color = typeof e["color"] === "string" && HEX.test(e["color"].trim()) ? e["color"].trim().toUpperCase() : "#FFFFFF";
+    const viewer = typeof e["viewer"] === "string" && e["viewer"].trim() ? e["viewer"].trim().slice(0, 24) : "路人";
     items.push({ id: uid("d"), time: Math.round(time * 100) / 100, text, viewer, color });
   }
   items.sort((a, b) => a.time - b.time);

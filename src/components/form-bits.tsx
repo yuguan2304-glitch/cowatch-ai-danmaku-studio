@@ -67,7 +67,7 @@ export function RangeField({
         <span className="font-medium text-muted-foreground">{label}</span>
         <span className="font-mono text-foreground">{format ? format(value) : value}</span>
       </div>
-      <Slider value={[value]} min={min} max={max} step={step} onValueChange={(v) => onChange(v[0])} aria-label={label} />
+      <Slider value={[value]} min={min} max={max} step={step} onValueChange={(v) => onChange(v[0] ?? value)} aria-label={label} />
       {hint && <p className="text-xs text-muted-foreground/80">{hint}</p>}
     </div>
   );

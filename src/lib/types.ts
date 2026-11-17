@@ -104,9 +104,9 @@ export type Segment = {
   status: SegmentStatus;
   attempts: number;
   count: number;
-  error?: string;
-  inputTokens?: number;
-  outputTokens?: number;
+  error?: string | undefined;
+  inputTokens?: number | undefined;
+  outputTokens?: number | undefined;
 };
 
 export type HistorySession = {
@@ -116,10 +116,10 @@ export type HistorySession = {
   updatedAt: number;
   sourceKind: SourceKind;
   sourceLabel: string;
-  sourceUrl?: string;
+  sourceUrl?: string | undefined;
   duration: number;
   demo: boolean;
-  model?: string;
+  model?: string | undefined;
   danmaku: Danmaku[];
   settings: Omit<Settings, "display">;
 };

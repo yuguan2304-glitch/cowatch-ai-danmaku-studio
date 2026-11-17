@@ -18,8 +18,8 @@ export async function geminiGenerate(opts: {
   system: string;
   userText: string;
   images: { dataUrl: string }[];
-  video?: { mimeType: string; base64: string; start: number; end: number };
-  signal?: AbortSignal;
+  video?: { mimeType: string; base64: string; start: number; end: number } | undefined;
+  signal?: AbortSignal | undefined;
 }): Promise<ChatResult> {
   const parts: Part[] = [];
   if (opts.video) {
@@ -33,6 +33,7 @@ export async function geminiGenerate(opts: {
   }
   for (const img of opts.images) {
     const [, data] = img.dataUrl.split(",");
+    if (!data) continue;
     parts.push({ inlineData: { mimeType: "image/jpeg", data } });
   }
   parts.push({ text: opts.userText });
@@ -46,7 +47,7 @@ export async function geminiGenerate(opts: {
         contents: [{ role: "user", parts }],
         generationConfig: { responseMimeType: "application/json", responseSchema: GEMINI_RESPONSE_SCHEMA },
       }),
-      signal: opts.signal,
+      signal: opts.signal ?? null,
       credentials: "omit",
       referrerPolicy: "no-referrer",
     });

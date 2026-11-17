@@ -81,7 +81,7 @@ export type SegmentPromptInput = {
   frameTimes: number[];
   cues: Cue[];
   memory: Danmaku[];
-  globalContext?: string;
+  globalContext?: string | undefined;
   hasVideoClip: boolean;
   title: string;
 };

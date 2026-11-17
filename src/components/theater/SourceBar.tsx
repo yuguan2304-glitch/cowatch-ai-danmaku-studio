@@ -31,10 +31,10 @@ export function SourceBar() {
       return;
     }
     const base = checkBaseUrl(p.transcribeBaseUrl);
-    if (!base.ok) return toast.error(`转录接口：${base.reason}`);
+    if (!base.ok) { toast.error(`转录接口：${base.reason}`); return; }
     const secrets = useSecrets.getState();
     const key = p.transcribeUseMainKey ? secrets.apiKey : secrets.transcribeKey;
-    if (!key) return toast.error("请先在「AI 接口 → 可选：音轨转录」填写密钥");
+    if (!key) { toast.error("请先在「AI 接口 → 可选：音轨转录」填写密钥"); return; }
     if (!window.confirm(`将把整个视频文件「${file.name}」发送到 ${base.url.host} 进行转录，确定吗？`)) return;
     abortRef.current = new AbortController();
     setBusy(true);

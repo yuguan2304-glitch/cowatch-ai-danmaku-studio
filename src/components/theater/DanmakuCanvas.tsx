@@ -15,6 +15,7 @@ export function DanmakuCanvas() {
     const el = canvasRef.current?.parentElement;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
+      if (!entry) return;
       setSize({ w: Math.round(entry.contentRect.width), h: Math.round(entry.contentRect.height) });
     });
     ro.observe(el);
