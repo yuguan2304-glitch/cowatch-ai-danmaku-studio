@@ -54,6 +54,8 @@ export function GenerationPanel() {
 
   const done = segments.filter((s) => s.status === "done").length;
   const pct = segments.length ? Math.round((done / segments.length) * 100) : 0;
+  const presetLocked = generating || done > 0;
+  const isLongVideo = duration >= 1800;
 
   const sendList = [
     material.useVideo ? "本片段视频（含音轨，Gemini 原生）" : material.canFrames ? `抽帧图片（每 ${settings.analysis.frameInterval}s，最宽 ${settings.analysis.frameMaxWidth}px）` : null,
@@ -115,12 +117,12 @@ export function GenerationPanel() {
         </Button>
       </div>
 
-      {duration >= 1800 && !generating && segments.every(s => s.status !== "done") && (
+      {source.kind !== "none" && (
         <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
-          <div className="mb-1 font-medium">长视频省钱提速</div>
-          <p className="mb-2 text-xs text-muted-foreground">只改变后续生成：减少分段请求与发送的截图；不会额外调用 API。精细模式保持原有设置。建议先用省钱模式试一小段，检查弹幕质量。</p>
+          <div className="mb-1 font-medium">省钱提速模式{isLongVideo ? " · 长视频推荐" : ""}</div>
+          <p className="mb-2 text-xs text-muted-foreground">所有视频均可使用；减少请求数及截图量，不额外调用 API。建议先试一小段，确认弹幕质量后再生成长视频。</p>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary" onClick={() => {
+            <Button size="sm" variant="secondary" disabled={presetLocked} onClick={() => {
               useApp.getState().update("analysis", {segmentLength: 30, frameInterval: 5});
               useApp.getState().setSegments([]);
               toast.info("已切换精细模式：每 30 秒一段、5 秒一帧");
@@ -136,7 +138,9 @@ export function GenerationPanel() {
               toast.success("已切换省钱模式：每 90 秒一段、9 秒一帧");
             }}>省钱 · 90 秒 / 9 秒</Button>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">当前：每 {settings.analysis.segmentLength} 秒一段，每 {settings.analysis.frameInterval} 秒一帧。省钱模式可能错过短暂高能画面；正在生成或已有完成片段时不会显示切换按钮，以免破坏进度。</p>
+          <p className="mt-2 text-xs text-muted-foreground">当前：每 {settings.analysis.segmentLength} 秒一段，每 {settings.analysis.frameInterval} 秒一帧。省钱模式可能错过短暂高能画面。</p>
+          {duration <= 0 && <p className="mt-1 text-xs text-muted-foreground">等待读取视频时长；设置仍可提前选择。</p>}
+          {presetLocked && <p className="mt-1 text-xs text-amber-500">{generating ? "正在生成，暂停后才能调整。" : "该视频已有完成片段，为避免时间线错位，暂时锁定预设切换。其他未生成的视频可以正常选择；如需修改此视频，请先备份当前弹幕再重新生成。"}</p>}
         </div>
       )}
 
