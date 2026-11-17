@@ -104,7 +104,7 @@ export function TranslationPanel(){
    }catch(e){if(!ctrl.signal.aborted)toast.error((e as Error).message);}finally{setBusy(false);if(abort.current===ctrl)abort.current=null;}
  };
  const transcriptionAddress=provider.transcribeBaseUrl.trim();
- const usingMainEndpoint=transcriptionAddress.replace(/\\/+$/, "")===provider.baseUrl.trim().replace(/\\/+$/, "");
+ const usingMainEndpoint=transcriptionAddress.replace(/\/+$/, "")===provider.baseUrl.trim().replace(/\/+$/, "");
  const explainTranscriptionError=(error: unknown) => {
    const message=error instanceof Error ? error.message : String(error);
    if (/网络请求失败|Failed to fetch|NetworkError|CORS/i.test(message)) {
