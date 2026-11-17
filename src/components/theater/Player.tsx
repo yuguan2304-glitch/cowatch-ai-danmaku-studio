@@ -23,6 +23,7 @@ export function Player() {
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
 
   // Use page-level cinema mode rather than the browser's native Android
   // fullscreen, which can show a persistent system exit banner and hide controls.
@@ -32,6 +33,7 @@ export function Player() {
       const v = videoRef.current;
       if (v) resumeRef.current = {time:v.currentTime, playing:!v.paused};
       checkPortrait();
+      setControlsVisible(true);
       setFauxFullscreen(x => !x);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -67,6 +69,22 @@ export function Player() {
     };
   }, [fauxFullscreen]);
 
+  // Real video players hide their controls while playing. Any tap on empty
+  // video space toggles them; clicks on buttons and the seek bar are ignored.
+  useEffect(() => {
+    if (!controlsVisible || !playing || !fauxFullscreen) return;
+    const timeout = window.setTimeout(() => setControlsVisible(false), 3200);
+    return () => window.clearTimeout(timeout);
+  }, [controlsVisible, playing, fauxFullscreen]);
+
+  const toggleControlsOnStage = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isHtmlVideo || !fauxFullscreen) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest("button, input, a, select, textarea, label, [data-player-control]")) return;
+    setControlsVisible(v => !v);
+  };
+
   const enterBrowserFullscreen = async () => {
     const stage = stageRef.current;
     if (!stage || !stage.requestFullscreen) {
@@ -88,6 +106,7 @@ export function Player() {
       try { await document.exitFullscreen(); } catch { /* exit may be blocked */ }
     }
     setNativeFullscreen(false);
+    setControlsVisible(true);
     setFauxFullscreen(false);
   };
 
@@ -162,6 +181,7 @@ export function Player() {
         backgroundColor: "#000",
       } : undefined}
       data-fs={fauxFullscreen}
+      onClick={toggleControlsOnStage}
       onDragOver={(e) => {
         if (source.kind === "none") {
           e.preventDefault();
@@ -205,7 +225,7 @@ export function Player() {
             if (Number.isFinite(d) && d > 0) { useApp.getState().setDuration(d); setDuration(d); }
           }}
           onError={onVideoError}
-          onPlay={() => setPlaying(true)}
+          onPlay={() => { setPlaying(true); if (fauxFullscreen) setControlsVisible(true); }}
           onPause={() => setPlaying(false)}
           onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
           onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
@@ -259,7 +279,7 @@ export function Player() {
         </div>
       )}
 
-      {isHtmlVideo && <div className="absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-2 pt-8 text-white">
+      {isHtmlVideo && <div data-player-control aria-hidden={fauxFullscreen && !controlsVisible} className={["absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-2 pt-8 text-white transition-opacity duration-200", fauxFullscreen && !controlsVisible ? "pointer-events-none opacity-0" : "opacity-100"].join(" ")}>
         <input type="range" aria-label="视频进度" className="mb-2 w-full accent-amber-400" min={0} max={Math.max(1,duration)} step={0.1} value={Math.min(currentTime,Math.max(1,duration))} onChange={e=>{const v=videoRef.current;if(v){v.currentTime=Number(e.target.value);setCurrentTime(v.currentTime);}}}/>
         <div className="flex items-center gap-2">
           <button type="button" className="rounded bg-black/40 p-2" aria-label={playing?"暂停":"播放"} onClick={togglePlayback}>{playing?<Pause className="size-5"/>:<Play className="size-5"/>}</button>
@@ -273,7 +293,7 @@ export function Player() {
       {source.kind !== "none" && !isHtmlVideo && (
         <button type="button" onClick={() => void toggleFullscreen()} className="absolute right-2 top-2 z-50 rounded-md bg-black/85 px-3 py-2 text-sm font-bold text-white" aria-label={fauxFullscreen?"退出放大":"放大画面"}>{fauxFullscreen?"退出放大":"放大画面"}</button>
       )}
-      {fauxFullscreen && <div className="absolute right-3 top-3 z-[70] flex flex-col items-end gap-2">
+      {fauxFullscreen && <div data-player-control aria-hidden={!controlsVisible} className={["absolute right-3 top-3 z-[70] flex flex-col items-end gap-2 transition-opacity duration-200", controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"].join(" ")}>
         <button type="button" onClick={() => void leaveCinema()} className="rounded-lg border border-white/50 bg-black/85 px-4 py-2 text-sm font-bold text-white shadow-lg" aria-label="退出横屏返回放映室"><Minimize className="mr-1 inline size-4"/>退出横屏</button>
         {!nativeFullscreen && <button type="button" onClick={() => void enterBrowserFullscreen()} className="rounded-lg border border-amber-400/80 bg-black/85 px-3 py-2 text-xs font-semibold text-amber-300">隐藏浏览器顶部</button>}
         {fullscreenError && <span role="status" className="max-w-56 rounded bg-black/85 px-2 py-1 text-xs text-white">{fullscreenError}</span>}
