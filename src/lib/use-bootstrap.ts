@@ -2,16 +2,19 @@ import { useEffect } from "react";
 import { useApp, rememberedProviderAddresses, syncRememberedProviderAddresses, needsOldCredentialMigration } from "./store";
 import { db } from "./db";
 import { defaultSettings } from "./constants";
+import { loadTranscriptionPrefs } from "./translation-preferences";
 import type { Settings } from "./types";
 
 function merge(saved: Partial<Settings> | undefined): Settings {
   const d = defaultSettings();
   const addresses = rememberedProviderAddresses();
-  if (!saved) return {...d,provider:{...d.provider,...addresses}};
+  const rememberedTranscription = loadTranscriptionPrefs();
+  const transcribeOverrides = rememberedTranscription ? {transcribeBaseUrl: rememberedTranscription.address, transcribeModel: rememberedTranscription.model, transcribeUseMainKey: rememberedTranscription.useMainKey} : {};
+  if (!saved) return {...d,provider:{...d.provider,...addresses,...transcribeOverrides}};
   // Users asked to initialize all previous API choices, not only hide them.
   const provider = needsOldCredentialMigration() ? d.provider : { ...d.provider, ...saved.provider, baseUrl: addresses.baseUrl ?? d.provider.baseUrl, transcribeBaseUrl: addresses.transcribeBaseUrl ?? d.provider.transcribeBaseUrl };
   return {
-    provider,
+    provider: {...provider,...transcribeOverrides},
     analysis: { ...d.analysis, ...saved.analysis },
     generation: { ...d.generation, ...saved.generation },
     audience: { ...d.audience, ...saved.audience },
