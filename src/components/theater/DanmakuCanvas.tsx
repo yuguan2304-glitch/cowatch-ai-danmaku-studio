@@ -58,7 +58,7 @@ export function DanmakuCanvas() {
       ctx.clearRect(0, 0, size.w, size.h);
       const clock = getClock();
       if (!display.enabled || !clock) return;
-      const t = clock.getTime();
+      const t = clock.getTime() - (display.timeOffset ?? 0);
       ctx.font = font;
       ctx.textBaseline = "top";
       ctx.lineJoin = "round";
@@ -74,7 +74,7 @@ export function DanmakuCanvas() {
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [placed, maxWidth, size.w, size.h, font, lineHeight, display.enabled, display.opacity, display.crossSeconds, display.fontSize]);
+  }, [placed, maxWidth, size.w, size.h, font, lineHeight, display.enabled, display.opacity, display.crossSeconds, display.fontSize, display.timeOffset]);
 
   return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />;
 }

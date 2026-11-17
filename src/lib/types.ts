@@ -80,6 +80,8 @@ export type GenerationConfig = {
 export type DisplayConfig = {
   enabled: boolean;
   crossSeconds: number;
+  /** Playback-only correction. Negative values show danmaku earlier. */
+  timeOffset?: number;
   fontSize: number;
   opacity: number;
   displayDensity: number;

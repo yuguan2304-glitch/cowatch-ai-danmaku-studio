@@ -21,6 +21,10 @@ export function Player() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [brightness, setBrightness] = useState(1);
+  const [seekPreview, setSeekPreview] = useState<number | null>(null);
+  const touchStart = useRef<{ x: number; y: number; v: number; b: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const isHtmlVideo = source.kind === "file" || source.kind === "url";
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -220,10 +224,11 @@ export function Player() {
           onPlay={() => { setPlaying(true); setControlsVisible(true); }}
           onPause={() => setPlaying(false)}
           onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-          onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
+          onVolumeChange={(e) => { setMuted(e.currentTarget.muted); setVolume(e.currentTarget.volume); }}
           onEnded={() => setPlaying(false)}
         />
       )}
+      {isHtmlVideo && brightness < 1 && <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[5]" style={{ background: `rgba(0,0,0,${(1-brightness)*0.85})` }} />}
       {source.kind === "youtube" && source.youtubeId && <YouTubeEmbed id={source.youtubeId} />}
       {source.kind === "bilibili" && source.bilibiliEmbed && (
         <iframe
@@ -275,16 +280,31 @@ export function Player() {
         type="button"
         aria-label={controlsVisible ? "隐藏播放控制条" : "显示播放控制条"}
         onClick={() => setControlsVisible(v => !v)}
+        onTouchStart={e => { const t=e.touches[0]; if(t) touchStart.current={x:t.clientX,y:t.clientY,v:videoRef.current?.volume??1,b:brightness}; }}
+        onTouchEnd={e => {
+          const g=touchStart.current, t=e.changedTouches[0]; touchStart.current=null;
+          if (!g || !t) return;
+          const dy=g.y-t.clientY;
+          if (Math.abs(dy)<35 || Math.abs(dy)<Math.abs(t.clientX-g.x)*1.4) return;
+          const rect=e.currentTarget.getBoundingClientRect();
+          const delta=dy/Math.max(150,rect.height);
+          if(g.x<rect.left+rect.width/2) setBrightness(Math.max(0.15,Math.min(1,g.b+delta)));
+          else if(videoRef.current){videoRef.current.volume=Math.max(0,Math.min(1,g.v+delta));videoRef.current.muted=false;}
+          setControlsVisible(true);
+        }}
         className="absolute inset-0 z-30 h-full w-full cursor-default bg-transparent"
         style={{ touchAction: "manipulation" }}
       />}
 
       {isHtmlVideo && <div data-player-control aria-hidden={!controlsVisible} className={["absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-2 pt-8 text-white transition-opacity duration-200", !controlsVisible ? "pointer-events-none opacity-0" : "opacity-100"].join(" ")}>
-        <input type="range" aria-label="视频进度" className="mb-2 w-full accent-amber-400" min={0} max={Math.max(1,duration)} step={0.1} value={Math.min(currentTime,Math.max(1,duration))} onChange={e=>{const v=videoRef.current;if(v){v.currentTime=Number(e.target.value);setCurrentTime(v.currentTime);}}}/>
+        <input type="range" aria-label="视频进度（拖动跳转）" className="mb-2 h-6 w-full cursor-pointer accent-amber-400" min={0} max={Math.max(1,duration)} step={0.1} value={Math.min(seekPreview ?? currentTime,Math.max(1,duration))} onPointerDown={() => setSeekPreview(currentTime)} onChange={e=>{const t=Number(e.target.value);setSeekPreview(t);if(videoRef.current)videoRef.current.currentTime=t;setCurrentTime(t);}} onPointerUp={()=>setSeekPreview(null)} onPointerCancel={()=>setSeekPreview(null)}/>
+        {seekPreview !== null && <div className="mb-1 text-center text-xs text-amber-300">跳转至 {fmt(seekPreview)}</div>}
         <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1 text-xs" title="画面亮度（只改变播放器画面）">☀ <input type="range" aria-label="画面亮度" min="0.15" max="1" step="0.05" value={brightness} onChange={e=>setBrightness(Number(e.target.value))} className="w-12 accent-amber-400 sm:w-16"/></label>
           <button type="button" className="rounded bg-black/40 p-2" aria-label={playing?"暂停":"播放"} onClick={togglePlayback}>{playing?<Pause className="size-5"/>:<Play className="size-5"/>}</button>
           <span className="text-xs tabular-nums">{fmt(currentTime)} / {fmt(duration)}</span>
           <div className="ml-auto flex items-center gap-2">
+            <input type="range" aria-label="视频音量" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={e=>{const v=videoRef.current;if(v){v.volume=Number(e.target.value);v.muted=false;}}} className="w-12 accent-amber-400 sm:w-20"/>
             <button type="button" className="rounded bg-black/40 p-2" aria-label={muted?"取消静音":"静音"} onClick={()=>{const v=videoRef.current;if(v)v.muted=!v.muted;}}>{muted?<VolumeX className="size-5"/>:<Volume2 className="size-5"/>}</button>
             <button type="button" onClick={() => void toggleFullscreen()} className="rounded bg-amber-400 px-3 py-2 font-semibold text-black" aria-label={fauxFullscreen?"退出横屏":"横屏放大"}>{fauxFullscreen?<Minimize className="size-5"/>:<Maximize className="size-5"/>}</button>
           </div>
