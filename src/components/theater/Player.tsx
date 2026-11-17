@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Film, Maximize, Minimize, Upload } from "lucide-react";
+import { Film, Maximize, Minimize, Upload, Play, Pause, Volume2, VolumeX } from "lucide-react";
 import { useApp } from "@/lib/store";
 import { setClock, stageRef, toggleFullscreen } from "@/lib/clock";
 import { DanmakuCanvas } from "./DanmakuCanvas";
@@ -12,70 +12,51 @@ export function Player() {
   const demo = useApp((s) => s.demo);
   const hasDanmaku = useApp((s) => s.danmaku.length > 0);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [fs, setFs] = useState(false);
   const [fauxFullscreen, setFauxFullscreen] = useState(false);
   const [portrait, setPortrait] = useState(false);
-  const [fullscreenHint, setFullscreenHint] = useState("");
+  const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [muted, setMuted] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
+  // Use page-level cinema mode rather than the browser's native Android
+  // fullscreen, which can show a persistent system exit banner and hide controls.
   useEffect(() => {
     const stage = stageRef.current;
     const checkPortrait = () => setPortrait(window.innerHeight > window.innerWidth);
-    const onFs = () => {
-      const native = document.fullscreenElement === stage;
-      setFs(native);
-      if (!native) setFauxFullscreen(false);
-    };
-    const toggle = async () => {
-      setFullscreenHint("");
-      if (document.fullscreenElement === stage) {
-        try { await document.exitFullscreen(); } catch { setFauxFullscreen(false); }
-        return;
-      }
-      if (fauxFullscreen) { setFauxFullscreen(false); return; }
-      let native = false;
-      if (stage?.requestFullscreen) {
-        try {
-          await stage.requestFullscreen();
-          native = document.fullscreenElement === stage;
-        } catch { /* Browser denied native fullscreen: use a viewport fallback. */ }
-      }
-      if (!native) {
-        setFauxFullscreen(true);
-        checkPortrait();
-        setFullscreenHint("浏览器不支持页面原生全屏，已切换沉浸式观影。");
-      } else {
-        // Android may allow orientation.lock only while fullscreen.
-        try {
-          const orientation = screen.orientation as ScreenOrientation & { lock?: (value: "landscape") => Promise<void> };
-          if (orientation?.lock) await orientation.lock("landscape");
-          else { checkPortrait(); setFullscreenHint("如果画面仍是竖屏，请旋转手机或开启系统自动旋转。"); }
-        } catch {
-          // Some Android in-app browsers allow fullscreen but deny orientation.lock.
-          // Fall back to a rotated fixed-position theater while keeping subtitles and danmaku.
-          try { await document.exitFullscreen(); } catch { /* native exit may be unsupported */ }
-          checkPortrait();
-          setFauxFullscreen(true);
-          setFullscreenHint("已启用兼容横屏模式。若画面方向异常，可尝试关闭系统旋转锁定。");
-        }
-      }
+    const toggle = () => { checkPortrait(); setFauxFullscreen(v => !v); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFauxFullscreen(false);
     };
     checkPortrait();
-    document.addEventListener("fullscreenchange", onFs);
     window.addEventListener("resize", checkPortrait);
+    window.addEventListener("keydown", onKey);
     stage?.addEventListener("cowatch:toggle-fullscreen", toggle);
     return () => {
-      document.removeEventListener("fullscreenchange", onFs);
       window.removeEventListener("resize", checkPortrait);
+      window.removeEventListener("keydown", onKey);
       stage?.removeEventListener("cowatch:toggle-fullscreen", toggle);
     };
-  }, [fauxFullscreen]);
+  }, []);
 
   useEffect(() => {
-    const oldOverflow = document.body.style.overflow;
+    const overflow = document.body.style.overflow;
     if (fauxFullscreen) document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = oldOverflow; };
+    return () => { document.body.style.overflow = overflow; };
   }, [fauxFullscreen]);
+
+  const fmt = (seconds: number) => {
+    if (!Number.isFinite(seconds)) return "0:00";
+    const v = Math.max(0, Math.floor(seconds));
+    return Math.floor(v/60)+":"+String(v%60).padStart(2,"0");
+  };
+  const togglePlayback = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) void video.play().catch(() => undefined);
+    else video.pause();
+  };
 
   const isHtmlVideo = source.kind === "file" || source.kind === "url";
 
@@ -120,8 +101,8 @@ export function Player() {
       ref={(el) => {
         stageRef.current = el;
       }}
-      className={["group/stage relative aspect-video w-full overflow-hidden rounded-lg bg-screen shadow-screen", (fs || fauxFullscreen) ? "aspect-auto rounded-none" : "", fs ? "h-[100dvh] w-[100dvw]" : "", fauxFullscreen ? "fixed z-[100] bg-black" : "", fauxFullscreen && portrait ? "left-[100vw] top-0 h-[100vw] w-[100dvh] origin-top-left rotate-90" : "", fauxFullscreen && !portrait ? "inset-0 h-[100dvh] w-[100dvw]" : ""].join(" ")}
-      data-fs={fs || fauxFullscreen}
+      className={["group/stage relative aspect-video w-full overflow-hidden rounded-lg bg-screen shadow-screen", fauxFullscreen ? "fixed z-[200] aspect-auto rounded-none bg-black" : "", fauxFullscreen && portrait ? "left-[100vw] top-0 h-[100vw] w-[100dvh] origin-top-left rotate-90" : "", fauxFullscreen && !portrait ? "inset-0 h-[100dvh] w-[100dvw]" : ""].join(" ")}
+      data-fs={fauxFullscreen}
       onDragOver={(e) => {
         if (source.kind === "none") {
           e.preventDefault();
@@ -142,17 +123,21 @@ export function Player() {
           ref={videoRef}
           src={source.src}
           crossOrigin={source.crossOrigin ? "anonymous" : undefined}
-          controls
           playsInline
-          controlsList="nofullscreen"
+          preload="metadata"
           disablePictureInPicture
           className="absolute inset-0 h-full w-full"
-          onLoadedMetadata={(e) => useApp.getState().setDuration(e.currentTarget.duration || 0)}
+          onLoadedMetadata={(e) => { const d=e.currentTarget.duration || 0; useApp.getState().setDuration(d); setDuration(d); }}
           onDurationChange={(e) => {
             const d = e.currentTarget.duration;
-            if (Number.isFinite(d) && d > 0) useApp.getState().setDuration(d);
+            if (Number.isFinite(d) && d > 0) { useApp.getState().setDuration(d); setDuration(d); }
           }}
           onError={onVideoError}
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+          onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
+          onEnded={() => setPlaying(false)}
         />
       )}
       {source.kind === "youtube" && source.youtubeId && <YouTubeEmbed id={source.youtubeId} />}
@@ -202,17 +187,22 @@ export function Player() {
         </div>
       )}
 
-      {fullscreenHint && (fs || fauxFullscreen) && <div className="pointer-events-none absolute left-2 top-2 z-30 max-w-[75%] rounded bg-black/65 px-2 py-1 text-xs text-white">{fullscreenHint}</div>}
-      {source.kind !== "none" && (
-        <button
-          type="button"
-          onClick={() => void toggleFullscreen()}
-          className="absolute right-2 top-2 rounded-md bg-screen/70 p-1.5 text-foreground opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 sm:opacity-0 sm:group-hover/stage:opacity-100"
-          aria-label={fs || fauxFullscreen ? "退出全屏" : "横屏全屏（含弹幕和字幕）"}
-        >
-          {fs || fauxFullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
-        </button>
+      {isHtmlVideo && <div className="absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-2 pt-8 text-white">
+        <input type="range" aria-label="视频进度" className="mb-2 w-full accent-amber-400" min={0} max={Math.max(1,duration)} step={0.1} value={Math.min(currentTime,Math.max(1,duration))} onChange={e=>{const v=videoRef.current;if(v){v.currentTime=Number(e.target.value);setCurrentTime(v.currentTime);}}}/>
+        <div className="flex items-center gap-2">
+          <button type="button" className="rounded bg-black/40 p-2" aria-label={playing?"暂停":"播放"} onClick={togglePlayback}>{playing?<Pause className="size-5"/>:<Play className="size-5"/>}</button>
+          <span className="text-xs tabular-nums">{fmt(currentTime)} / {fmt(duration)}</span>
+          <div className="ml-auto flex items-center gap-2">
+            <button type="button" className="rounded bg-black/40 p-2" aria-label={muted?"取消静音":"静音"} onClick={()=>{const v=videoRef.current;if(v)v.muted=!v.muted;}}>{muted?<VolumeX className="size-5"/>:<Volume2 className="size-5"/>}</button>
+            <button type="button" onClick={() => void toggleFullscreen()} className="rounded bg-amber-400 px-3 py-2 font-semibold text-black" aria-label={fauxFullscreen?"退出横屏":"横屏放大"}>{fauxFullscreen?<Minimize className="size-5"/>:<Maximize className="size-5"/>}</button>
+          </div>
+        </div>
+      </div>}
+      {source.kind !== "none" && !isHtmlVideo && (
+        <button type="button" onClick={() => void toggleFullscreen()} className="absolute right-2 top-2 z-50 rounded-md bg-black/85 px-3 py-2 text-sm font-bold text-white" aria-label={fauxFullscreen?"退出放大":"放大画面"}>{fauxFullscreen?"退出放大":"放大画面"}</button>
       )}
+      {fauxFullscreen && <button type="button" onClick={() => setFauxFullscreen(false)} className="absolute right-3 top-3 z-[70] rounded-lg border border-white/50 bg-black/85 px-4 py-2 text-sm font-bold text-white shadow-lg" aria-label="退出横屏返回放映室"><Minimize className="mr-1 inline size-4"/> 退出横屏</button>}
+
     </div>
   );
 }
