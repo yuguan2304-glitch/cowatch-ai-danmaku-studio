@@ -3,6 +3,7 @@ import { Film, Maximize, Minimize, Upload } from "lucide-react";
 import { useApp } from "@/lib/store";
 import { setClock, stageRef, toggleFullscreen } from "@/lib/clock";
 import { DanmakuCanvas } from "./DanmakuCanvas";
+import { SubtitleOverlay } from "./SubtitleOverlay";
 import { YouTubeEmbed } from "./YouTubeEmbed";
 import { openLocalFile } from "./source-actions";
 
@@ -12,13 +13,69 @@ export function Player() {
   const hasDanmaku = useApp((s) => s.danmaku.length > 0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [fs, setFs] = useState(false);
+  const [fauxFullscreen, setFauxFullscreen] = useState(false);
+  const [portrait, setPortrait] = useState(false);
+  const [fullscreenHint, setFullscreenHint] = useState("");
   const [dragOver, setDragOver] = useState(false);
 
   useEffect(() => {
-    const onFs = () => setFs(!!document.fullscreenElement);
+    const stage = stageRef.current;
+    const checkPortrait = () => setPortrait(window.innerHeight > window.innerWidth);
+    const onFs = () => {
+      const native = document.fullscreenElement === stage;
+      setFs(native);
+      if (!native) setFauxFullscreen(false);
+    };
+    const toggle = async () => {
+      setFullscreenHint("");
+      if (document.fullscreenElement === stage) {
+        try { await document.exitFullscreen(); } catch { setFauxFullscreen(false); }
+        return;
+      }
+      if (fauxFullscreen) { setFauxFullscreen(false); return; }
+      let native = false;
+      if (stage?.requestFullscreen) {
+        try {
+          await stage.requestFullscreen();
+          native = document.fullscreenElement === stage;
+        } catch { /* Browser denied native fullscreen: use a viewport fallback. */ }
+      }
+      if (!native) {
+        setFauxFullscreen(true);
+        checkPortrait();
+        setFullscreenHint("浏览器不支持页面原生全屏，已切换沉浸式观影。");
+      } else {
+        // Android may allow orientation.lock only while fullscreen.
+        try {
+          const orientation = screen.orientation as ScreenOrientation & { lock?: (value: "landscape") => Promise<void> };
+          if (orientation?.lock) await orientation.lock("landscape");
+          else { checkPortrait(); setFullscreenHint("如果画面仍是竖屏，请旋转手机或开启系统自动旋转。"); }
+        } catch {
+          // Some Android in-app browsers allow fullscreen but deny orientation.lock.
+          // Fall back to a rotated fixed-position theater while keeping subtitles and danmaku.
+          try { await document.exitFullscreen(); } catch { /* native exit may be unsupported */ }
+          checkPortrait();
+          setFauxFullscreen(true);
+          setFullscreenHint("已启用兼容横屏模式。若画面方向异常，可尝试关闭系统旋转锁定。");
+        }
+      }
+    };
+    checkPortrait();
     document.addEventListener("fullscreenchange", onFs);
-    return () => document.removeEventListener("fullscreenchange", onFs);
-  }, []);
+    window.addEventListener("resize", checkPortrait);
+    stage?.addEventListener("cowatch:toggle-fullscreen", toggle);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFs);
+      window.removeEventListener("resize", checkPortrait);
+      stage?.removeEventListener("cowatch:toggle-fullscreen", toggle);
+    };
+  }, [fauxFullscreen]);
+
+  useEffect(() => {
+    const oldOverflow = document.body.style.overflow;
+    if (fauxFullscreen) document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = oldOverflow; };
+  }, [fauxFullscreen]);
 
   const isHtmlVideo = source.kind === "file" || source.kind === "url";
 
@@ -63,8 +120,8 @@ export function Player() {
       ref={(el) => {
         stageRef.current = el;
       }}
-      className="group/stage relative aspect-video w-full overflow-hidden rounded-lg bg-screen shadow-screen data-[fs=true]:rounded-none"
-      data-fs={fs}
+      className={["group/stage relative aspect-video w-full overflow-hidden rounded-lg bg-screen shadow-screen", (fs || fauxFullscreen) ? "aspect-auto rounded-none" : "", fs ? "h-[100dvh] w-[100dvw]" : "", fauxFullscreen ? "fixed z-[100] bg-black" : "", fauxFullscreen && portrait ? "left-[100vw] top-0 h-[100vw] w-[100dvh] origin-top-left rotate-90" : "", fauxFullscreen && !portrait ? "inset-0 h-[100dvh] w-[100dvw]" : ""].join(" ")}
+      data-fs={fs || fauxFullscreen}
       onDragOver={(e) => {
         if (source.kind === "none") {
           e.preventDefault();
@@ -137,20 +194,23 @@ export function Player() {
 
       {source.kind !== "bilibili" && source.kind !== "none" && <DanmakuCanvas />}
 
+      {source.kind !== "none" && source.kind !== "bilibili" && <SubtitleOverlay />}
+
       {demo && hasDanmaku && (
         <div className="pointer-events-none absolute left-2 top-2 rounded bg-destructive/90 px-2 py-0.5 text-[11px] font-bold text-destructive-foreground">
           演示数据 · 非 AI 分析
         </div>
       )}
 
+      {fullscreenHint && (fs || fauxFullscreen) && <div className="pointer-events-none absolute left-2 top-2 z-30 max-w-[75%] rounded bg-black/65 px-2 py-1 text-xs text-white">{fullscreenHint}</div>}
       {source.kind !== "none" && (
         <button
           type="button"
           onClick={() => void toggleFullscreen()}
           className="absolute right-2 top-2 rounded-md bg-screen/70 p-1.5 text-foreground opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 sm:opacity-0 sm:group-hover/stage:opacity-100"
-          aria-label={fs ? "退出全屏" : "全屏（含弹幕）"}
+          aria-label={fs || fauxFullscreen ? "退出全屏" : "横屏全屏（含弹幕和字幕）"}
         >
-          {fs ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
+          {fs || fauxFullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
         </button>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { FileVideo, Link2, Captions, Mic, X, Loader2 } from "lucide-react";
+import { FileVideo, Link2, Captions, Mic, X, Loader2, Languages } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Notice } from "@/components/form-bits";
@@ -102,6 +102,7 @@ export function SourceBar() {
         <Button size="sm" variant="outline" onClick={() => subRef.current?.click()}>
           <Captions /> 导入字幕 SRT/VTT
         </Button>
+        <a href="#video-translation" className="inline-flex items-center gap-1.5 rounded-md border border-primary/45 bg-primary/10 px-3 py-2 text-primary hover:bg-primary/20 text-sm font-semibold"><Languages className="size-4" /> 视频 AI 翻译</a>
         <input
           ref={subRef}
           type="file"
