@@ -1,0 +1,116 @@
+import { create } from "zustand";
+import { defaultSettings } from "./constants";
+import { uid } from "./id";
+import type { Cue, Danmaku, Segment, Settings, VideoSource } from "./types";
+
+const emptySource: VideoSource = { kind: "none", src: "", label: "", crossOrigin: false, analyzable: false };
+
+type AppState = {
+  settings: Settings;
+  settingsLoaded: boolean;
+  source: VideoSource;
+  duration: number;
+  cues: Cue[];
+  cueLabel: string;
+  danmaku: Danmaku[];
+  demo: boolean;
+  segments: Segment[];
+  generating: boolean;
+  log: { at: number; level: "info" | "warn" | "error"; text: string }[];
+  sessionId: string;
+  restoredLabel: string | null;
+
+  setSettings: (s: Settings) => void;
+  update: <K extends keyof Settings>(key: K, patch: Partial<Settings[K]>) => void;
+  setSource: (s: VideoSource) => void;
+  patchSource: (p: Partial<VideoSource>) => void;
+  setDuration: (d: number) => void;
+  setCues: (cues: Cue[], label: string) => void;
+  setDanmaku: (d: Danmaku[], demo?: boolean) => void;
+  addDanmaku: (d: Danmaku[]) => void;
+  updateDanmaku: (id: string, patch: Partial<Danmaku>) => void;
+  removeDanmaku: (id: string) => void;
+  removeRange: (start: number, end: number, inclusiveEnd: boolean) => void;
+  setSegments: (s: Segment[]) => void;
+  updateSegment: (index: number, patch: Partial<Segment>) => void;
+  setGenerating: (g: boolean) => void;
+  pushLog: (level: "info" | "warn" | "error", text: string) => void;
+  clearLog: () => void;
+  newSession: () => void;
+  restore: (opts: { sessionId: string; danmaku: Danmaku[]; demo: boolean; label: string }) => void;
+};
+
+export const useApp = create<AppState>((set) => ({
+  settings: defaultSettings(),
+  settingsLoaded: false,
+  source: emptySource,
+  duration: 0,
+  cues: [],
+  cueLabel: "",
+  danmaku: [],
+  demo: false,
+  segments: [],
+  generating: false,
+  log: [],
+  sessionId: uid("s"),
+  restoredLabel: null,
+
+  setSettings: (settings) => set({ settings, settingsLoaded: true }),
+  update: (key, patch) =>
+    set((st) => ({ settings: { ...st.settings, [key]: { ...st.settings[key], ...patch } } })),
+  setSource: (source) =>
+    set((st) => {
+      const keep = st.restoredLabel !== null && st.restoredLabel === source.label;
+      return {
+        source,
+        duration: 0,
+        segments: [],
+        danmaku: keep ? st.danmaku : [],
+        demo: keep ? st.demo : false,
+        cues: keep ? st.cues : [],
+        cueLabel: keep ? st.cueLabel : "",
+        sessionId: keep ? st.sessionId : uid("s"),
+        restoredLabel: null,
+        log: [],
+      };
+    }),
+  patchSource: (p) => set((st) => ({ source: { ...st.source, ...p } })),
+  setDuration: (duration) => set({ duration }),
+  setCues: (cues, cueLabel) => set({ cues, cueLabel }),
+  setDanmaku: (danmaku, demo = false) => set({ danmaku: [...danmaku].sort((a, b) => a.time - b.time), demo }),
+  addDanmaku: (d) =>
+    set((st) => ({ danmaku: [...st.danmaku, ...d].sort((a, b) => a.time - b.time), demo: false })),
+  updateDanmaku: (id, patch) =>
+    set((st) => ({
+      danmaku: st.danmaku.map((d) => (d.id === id ? { ...d, ...patch } : d)).sort((a, b) => a.time - b.time),
+    })),
+  removeDanmaku: (id) => set((st) => ({ danmaku: st.danmaku.filter((d) => d.id !== id) })),
+  removeRange: (start, end, inclusiveEnd) =>
+    set((st) => ({
+      danmaku: st.danmaku.filter((d) => !(d.time >= start && (inclusiveEnd ? d.time <= end : d.time < end))),
+    })),
+  setSegments: (segments) => set({ segments }),
+  updateSegment: (index, patch) =>
+    set((st) => ({ segments: st.segments.map((s) => (s.index === index ? { ...s, ...patch } : s)) })),
+  setGenerating: (generating) => set({ generating }),
+  pushLog: (level, text) => set((st) => ({ log: [...st.log.slice(-99), { at: Date.now(), level, text }] })),
+  clearLog: () => set({ log: [] }),
+  newSession: () => set({ sessionId: uid("s") }),
+  restore: ({ sessionId, danmaku, demo, label }) =>
+    set({ sessionId, danmaku, demo, restoredLabel: label, segments: [] }),
+}));
+
+/** API keys: memory only. Never persisted, never logged. Cleared on reload. */
+type SecretState = {
+  apiKey: string;
+  transcribeKey: string;
+  setApiKey: (k: string) => void;
+  setTranscribeKey: (k: string) => void;
+};
+
+export const useSecrets = create<SecretState>((set) => ({
+  apiKey: "",
+  transcribeKey: "",
+  setApiKey: (apiKey) => set({ apiKey }),
+  setTranscribeKey: (transcribeKey) => set({ transcribeKey }),
+}));
