@@ -227,7 +227,7 @@ export async function saveHistory() {
     demo: st.demo,
     model: st.demo ? undefined : st.settings.provider.model,
     danmaku: st.danmaku,
-    settings: rest,
+    settings: { ...rest, provider: { ...rest.provider, baseUrl: "", transcribeBaseUrl: "" } },
   });
 }
 

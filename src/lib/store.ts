@@ -107,6 +107,32 @@ export const useApp = create<AppState>((set) => ({
  */
 const SECRET_STORAGE = "cowatch:remembered-api-key:v1";
 const REMEMBER_STORAGE = "cowatch:remember-api-key:v1";
+const ADDRESS_STORAGE = "cowatch:remembered-provider-addresses:v1";
+
+export function rememberedProviderAddresses(): {baseUrl?: string; transcribeBaseUrl?: string} {
+  if (typeof window === "undefined") return {};
+  try {
+    if (localStorage.getItem(REMEMBER_STORAGE) !== "yes") return {};
+    const stored: unknown = JSON.parse(localStorage.getItem(ADDRESS_STORAGE) || "{}");
+    if (!stored || typeof stored !== "object") return {};
+    const value = stored as Record<string, unknown>;
+    return {
+      ...(typeof value["baseUrl"] === "string" ? {baseUrl:value["baseUrl"]} : {}),
+      ...(typeof value["transcribeBaseUrl"] === "string" ? {transcribeBaseUrl:value["transcribeBaseUrl"]} : {}),
+    };
+  } catch { return {}; }
+}
+
+export function syncRememberedProviderAddresses() {
+  if (typeof window === "undefined") return;
+  try {
+    if (localStorage.getItem(REMEMBER_STORAGE) === "yes") {
+      const { baseUrl, transcribeBaseUrl } = useApp.getState().settings.provider;
+      localStorage.setItem(ADDRESS_STORAGE, JSON.stringify({baseUrl, transcribeBaseUrl}));
+    } else localStorage.removeItem(ADDRESS_STORAGE);
+  } catch { /* Storage unavailable; addresses remain session-only. */ }
+}
+
 
 function rememberedSecrets(): { apiKey: string; rememberKey: boolean } {
   if (typeof window === "undefined") return { apiKey: "", rememberKey: false };
@@ -125,6 +151,7 @@ function persistSecret(key: string, remember: boolean) {
     } else {
       localStorage.removeItem(REMEMBER_STORAGE);
       localStorage.removeItem(SECRET_STORAGE);
+      localStorage.removeItem(ADDRESS_STORAGE);
     }
   } catch { /* Storage may be unavailable. The in-memory key still works. */ }
 }
@@ -149,6 +176,7 @@ export const useSecrets = create<SecretState>((set, get) => ({
   setTranscribeKey: (transcribeKey) => set({ transcribeKey }),
   setRememberKey: (rememberKey) => {
     persistSecret(get().apiKey, rememberKey);
+    syncRememberedProviderAddresses();
     set({ rememberKey });
   },
   clearKeys: () => {
