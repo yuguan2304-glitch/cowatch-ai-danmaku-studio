@@ -6,9 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Notice } from "@/components/form-bits";
 import { useApp, useSecrets } from "@/lib/store";
 import { openLocalFile, openUrl, importSubtitleFile } from "./source-actions";
-import { transcribe } from "@/lib/ai/openai";
+import { transcribeVideoWithAudioChunks } from "@/lib/ai/video-transcribe";
 import { checkBaseUrl } from "@/lib/video-url";
-import { TRANSCRIBE_MAX_BYTES } from "@/lib/constants";
 import { isAbort } from "@/lib/ai/errors";
 
 export function SourceBar({ toolsOnly = false }: { toolsOnly?: boolean } = {}) {
@@ -17,6 +16,7 @@ export function SourceBar({ toolsOnly = false }: { toolsOnly?: boolean } = {}) {
   const cueLabel = useApp((s) => s.cueLabel);
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const subRef = useRef<HTMLInputElement>(null);
@@ -26,20 +26,19 @@ export function SourceBar({ toolsOnly = false }: { toolsOnly?: boolean } = {}) {
     const p = st.settings.provider;
     const file = st.source.file;
     if (!file) return;
-    if (file.size > TRANSCRIBE_MAX_BYTES) {
-      toast.error("文件超过 25MB，多数转录接口会拒绝。请先导入字幕或截取较短片段。");
-      return;
-    }
     const base = checkBaseUrl(p.transcribeBaseUrl);
     if (!base.ok) { toast.error(`转录接口：${base.reason}`); return; }
     const secrets = useSecrets.getState();
     const key = p.transcribeUseMainKey ? secrets.apiKey : secrets.transcribeKey;
     if (!key) { toast.error("请先在「AI 接口 → 可选：音轨转录」填写密钥"); return; }
-    if (!window.confirm(`将把整个视频文件「${file.name}」发送到 ${base.url.host} 进行转录，确定吗？`)) return;
+    const large = file.size > 25 * 1024 * 1024;
+    if (!window.confirm(large
+      ? `大视频将先在手机上播放提取音频（大致需要视频本身的时长），再分段把音频发送至 ${base.url.host}，可能产生费用。期间请保持共映在前台。继续？`
+      : `将把视频「${file.name}」发送到 ${base.url.host} 进行转录，可能产生费用。继续？`)) return;
     abortRef.current = new AbortController();
     setBusy(true);
     try {
-      const r = await transcribe({ baseUrl: p.transcribeBaseUrl, apiKey: key, model: p.transcribeModel, file, signal: abortRef.current.signal });
+      const r = await transcribeVideoWithAudioChunks({ baseUrl: p.transcribeBaseUrl, apiKey: key, model: p.transcribeModel, file, signal: abortRef.current.signal, onProgress:setProgress });
       if (!r.timestamped) {
         toast.warning("该转录模型未返回时间戳，无法按片段对齐，未导入。请改用支持 verbose_json 的模型（如 whisper-1）。");
         return;
@@ -50,6 +49,7 @@ export function SourceBar({ toolsOnly = false }: { toolsOnly?: boolean } = {}) {
       if (!isAbort(e)) toast.error((e as Error).message);
     } finally {
       setBusy(false);
+      setProgress("");
       abortRef.current = null;
     }
   };
@@ -126,7 +126,7 @@ export function SourceBar({ toolsOnly = false }: { toolsOnly?: boolean } = {}) {
         {source.kind === "file" &&
           (busy ? (
             <Button size="sm" variant="outline" onClick={() => abortRef.current?.abort()}>
-              <Loader2 className="animate-spin" /> 转录中…点此取消
+              <Loader2 className="animate-spin" /> {progress || "转录中…"} · 取消
             </Button>
           ) : (
             <Button size="sm" variant="outline" onClick={runTranscribe} title="可选：调用你配置的转录接口">
