@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { ModelPicker } from "@/components/theater/ModelPicker";
 import { useSubtitleDisplay } from "@/lib/subtitle-display";
 import { transcribeVideoWithAudioChunks } from "@/lib/ai/video-transcribe";
+import { transcribeLocalVideo } from "@/lib/ai/local-transcribe";
 import { loadTranslationPrefs, saveTranslationPrefs, getRememberedTranslationKey, saveTranslationKey, loadTranscriptionPrefs, saveTranscriptionPrefs, getRememberedTranscriptionKey, saveTranscriptionKey } from "@/lib/translation-preferences";
 type Translated = { index:number; text:string };
 function stamp(n:number){const ms=Math.max(0,Math.round(n*1000));return [Math.floor(ms/3600000),Math.floor(ms/60000)%60,Math.floor(ms/1000)%60].map(x=>String(x).padStart(2,"0")).join(":")+","+String(ms%1000).padStart(3,"0");}
@@ -113,6 +114,31 @@ export function TranslationPanel(){
    }
    return "音轨转录失败（" + transcriptionAddress + " / " + provider.transcribeModel + "）：" + message;
  };
+ const localTranscribe = async (full: boolean) => {
+   const file = source.file;
+   if(!file){toast.error("请先打开本地视频");return;}
+   if(cues.length && !confirm("已有字幕，本次本机识别结果将替换当前字幕。建议先导出 SRT 备份，继续吗？"))return;
+   if(!confirm(full
+     ? "整段视频将在你的手机上逐段读取并离线识别，通常不比视频播放快，可能耗时很久且占用内存。首次需要从 Hugging Face 下载语音模型（可能数十至上百 MB），不消耗转录 API 额度；确认开始吗？"
+     : "先本机识别前 2 分钟用于测试。首次会下载并缓存本地 Whisper 英语模型（可能数十至上百 MB 流量）；不调用付费转录 API。确认继续？"))return;
+   const ctrl = new AbortController(); abort.current = ctrl; setBusy(true);
+   const activeSession = useApp.getState().sessionId;
+   try {
+     const result = await transcribeLocalVideo({
+       file,signal:ctrl.signal,maxSeconds:full?Number.POSITIVE_INFINITY:120,
+       onProgress:setTranscriptionProgress,
+       onPartial:items=>{
+         if(useApp.getState().sessionId===activeSession && !ctrl.signal.aborted) {
+           useApp.getState().setCues(items,"本机 Whisper 英语识别（可编辑）");
+         }
+       },
+     });
+     if(!result.length){toast.warning("没有识别出英语语音。请检查原视频是否有声音，或导入已有字幕。");return;}
+     toast.success("本机识别完成：" + result.length + " 段字幕。接下来可点击翻译视频字幕。");
+   }catch(e){
+     if(!ctrl.signal.aborted)toast.error("本机识别未完成：" + (e instanceof Error?e.message:String(e)),{duration:9000});
+   }finally{setBusy(false);setTranscriptionProgress("");if(abort.current===ctrl)abort.current=null;}
+ };
  const extractAudioSubtitles=async()=>{
    const file=source.file;
    if(!file){toast.error("请先打开本地视频文件");return;}
@@ -133,11 +159,22 @@ export function TranslationPanel(){
    finally{setBusy(false);setTranscriptionProgress("");if(abort.current===ctrl)abort.current=null;}
  };
  const exportSrt=()=>{const rows=cues.map((c:Cue,i)=>[i+1,stamp(c.start)+" --> "+stamp(c.end),mode==="original"?c.text:mode==="both"?[c.text,translated[i]].filter(Boolean).join("\n"):translated[i]??c.text].join("\n"));downloadText("cowatch-subtitles.srt",rows.join("\n\n"),"text/plain");};
- return <details id="video-translation" className="panel scroll-mt-16 space-y-3 p-3"><summary className="cursor-pointer font-bold">🎞️ 视频 AI 字幕翻译</summary><p className="text-xs text-muted-foreground">视频翻译先转录声音，再翻译字幕。大于 25MB 的本地视频会在手机端实时提取并压缩音轨、分段上传，不直接上传整段视频；大致需要视频自身时长，期间请保持共映在前台。转录模型必须支持带时间戳的结果，可能产生费用。已有 SRT/VTT 字幕时可直接导入并翻译。</p>
+ return <details id="video-translation" className="panel scroll-mt-16 space-y-3 p-3"><summary className="cursor-pointer font-bold">🎞️ 视频 AI 字幕翻译</summary><p className="text-xs text-muted-foreground">推荐顺序：① 导入现成字幕（最省事）→ ② 本机免费识别英语（不走付费转录 API）→ ③ 付费云端转录。取得字幕后，再使用翻译 API 转成中文。长视频本机识别需保持页面前台，并可能消耗不少电量。</p>
  <div className="rounded-lg border border-primary/30 bg-secondary/20 p-3 space-y-2">
    <p className="font-semibold text-sm">① 取得视频字幕</p>
    <p className="text-xs text-muted-foreground">{cues.length?("已准备 "+cues.length+" 段字幕，可以直接进行下一步。"):"还没有字幕。可在视频上方导入 SRT/VTT，或从本地短视频提取音轨字幕。"}</p>
-   <div className="rounded border border-border bg-background/60 p-2 text-xs space-y-2">
+   <div className="rounded-lg border border-primary/20 p-3 space-y-2 text-sm">
+     <p className="font-semibold">优先：本机免费英语识别 <span className="text-xs font-normal text-muted-foreground">不消耗转录 API 额度</span></p>
+     <p className="text-xs text-muted-foreground">手机在本地读声音，Whisper 小模型识别英语。首次需下载模型（可能数十至上百 MB），使用 CPU / 内存，速度视手机而定；之后浏览器缓存可能复用模型。音轨不会发送到语音服务商。</p>
+     <div className="flex flex-wrap gap-2">
+       <Button size="sm" disabled={busy||source.kind!=="file"} onClick={()=>void localTranscribe(false)}>免费识别前 2 分钟（先测试）</Button>
+       <Button size="sm" variant="outline" disabled={busy||source.kind!=="file"} onClick={()=>void localTranscribe(true)}>免费识别整段视频</Button>
+     </div>
+     <p className="text-xs text-muted-foreground">仅对本地视频启用，支持情况依浏览器。多人说话、游戏音效与重叠对白可能识别不准；可在下方编辑字幕。字幕翻译仍可能使用收费 API。</p>
+   </div>
+   <details className="rounded border border-border bg-background/60 p-2 text-xs space-y-2">
+     <summary className="cursor-pointer font-semibold">备用：付费云端音轨转录 API（高级设置）</summary>
+     <div className="space-y-2 pt-2">
      <p className="font-semibold">音轨转录使用的 API（与弹幕生成独立）</p>
      <p className="break-all">目标：<span className="font-mono">{transcriptionAddress || "尚未填写"}/audio/transcriptions</span></p>
      <p>模型：<span className="font-mono">{provider.transcribeModel}</span> · 密钥：{provider.transcribeUseMainKey?"复用弹幕密钥":"使用转录专用密钥"}</p>
@@ -161,7 +198,9 @@ export function TranslationPanel(){
      <p className="text-muted-foreground">复制地址不等于保证可用。服务商必须开放 OpenAI 兼容的 /audio/transcriptions、支持所填模型并允许网页跨域；不满足时可导入 SRT/VTT，不会消耗转录 API 额度。</p>
    </div>
    <Button size="sm" variant="outline" disabled={busy||source.kind!=="file"||!!cues.length} onClick={()=>void extractAudioSubtitles()}>从本地视频提取并 AI 转录字幕</Button>
-   <p className="text-xs text-muted-foreground">大视频会先在本机实时生成小音频文件，再调用转录接口。十几分钟视频可能需要十几分钟，请保持应用在前台；若浏览器无法提取音轨，可改为导入 SRT/VTT。</p>
+   <p className="text-xs text-muted-foreground">大视频会先本地实时提取小音频段，再发送到配置的收费转录接口；保持页面前台。</p>
+     </div>
+   </details>
    {transcriptionProgress&&<p role="status" className="text-xs text-primary">{transcriptionProgress}</p>}
    </div>
    <p className="font-semibold text-sm">② 选择翻译方式</p>
