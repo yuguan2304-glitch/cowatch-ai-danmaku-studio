@@ -334,7 +334,7 @@ export function Player() {
           if (g && !g.changed) setControlsVisible(v => !v);
         }}
         onPointerCancel={() => { touchStart.current = null; setGestureHint(""); }}
-        onClick={(e) => { if (e.detail !== 0) setControlsVisible(v => !v); }}
+        onClick={(e) => { if ((e.nativeEvent as PointerEvent).pointerType === "mouse") setControlsVisible(v => !v); }}
         className="absolute inset-0 z-30 h-full w-full cursor-default bg-transparent"
         style={{ touchAction: "none" }}
       />}
