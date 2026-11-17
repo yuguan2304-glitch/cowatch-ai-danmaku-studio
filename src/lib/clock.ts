@@ -20,17 +20,7 @@ export function getClock(): PlayerClock | null {
 export const stageRef: { current: HTMLDivElement | null } = { current: null };
 
 export async function toggleFullscreen() {
-  const el = stageRef.current;
-  if (!el) return;
-  if (document.fullscreenElement) {
-    await document.exitFullscreen().catch(() => undefined);
-    return;
-  }
-  if (el.requestFullscreen) {
-    await el.requestFullscreen().catch(() => undefined);
-    return;
-  }
-  // iOS Safari: only the <video> itself can go fullscreen (danmaku overlay is lost there).
-  const v = el.querySelector("video") as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
-  v?.webkitEnterFullscreen?.();
+  // Player handles native fullscreen + mobile landscape fallback.
+  // A custom event keeps both control-bar and in-video buttons in sync.
+  stageRef.current?.dispatchEvent(new Event("cowatch:toggle-fullscreen"));
 }
