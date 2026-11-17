@@ -1,0 +1,40 @@
+name: Refresh Bun lockfile
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/refresh-bun-lock.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+      - name: Regenerate dependencies lockfile
+        run: bun install --lockfile-only
+      - name: Verify frozen install
+        run: bun install --frozen-lockfile
+      - name: Validate application
+        run: |
+          bun run build
+          bunx tsc --noEmit
+      - name: Commit synced lockfile
+        run: |
+          if ! git diff --quiet -- bun.lock; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add bun.lock
+            git commit -m "chore: sync bun.lock with Cloudflare dependency changes"
+            git push origin HEAD:main
+          else
+            echo "bun.lock already matches package.json"
+          fi
