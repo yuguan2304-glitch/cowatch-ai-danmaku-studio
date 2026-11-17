@@ -58,7 +58,13 @@ export class FrameExtractor {
     this.canvas.height = Math.max(16, Math.round((v.videoHeight || 360) * scale));
     const ctx = this.canvas.getContext("2d");
     if (!ctx) throw new Error("浏览器不支持 Canvas");
-    const out: { time: number; dataUrl: string }[] = [];
+    const out: { time: number; dataUrl: string; visualChange?: number }[] = [];
+    // Tiny local-only image comparison; no extra images sent to the model.
+    const probe = document.createElement("canvas");
+    probe.width = 32;
+    probe.height = 18;
+    const probeCtx = probe.getContext("2d", { willReadFrequently: true });
+    let previous: Uint8ClampedArray | null = null;
     for (const t of times) {
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
       await this.seek(t, signal);
@@ -69,7 +75,22 @@ export class FrameExtractor {
       } catch {
         throw new CorsTaintedError();
       }
-      out.push({ time: t, dataUrl });
+      let visualChange: number | undefined;
+      if (probeCtx) {
+        probeCtx.drawImage(v, 0, 0, probe.width, probe.height);
+        const pixels = probeCtx.getImageData(0, 0, probe.width, probe.height).data;
+        if (previous) {
+          let difference = 0;
+          for (let i = 0; i < pixels.length; i += 4) {
+            difference += (Math.abs(pixels[i]! - previous[i]!) +
+              Math.abs(pixels[i + 1]! - previous[i + 1]!) +
+              Math.abs(pixels[i + 2]! - previous[i + 2]!)) / 3;
+          }
+          visualChange = Math.round(difference / (pixels.length / 4) / 255 * 100);
+        }
+        previous = new Uint8ClampedArray(pixels);
+      }
+      out.push({ time: t, dataUrl, ...(visualChange === undefined ? {} : { visualChange }) });
     }
     return out;
   }
