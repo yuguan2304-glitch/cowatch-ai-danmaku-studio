@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { TranslationPanel } from "@/components/theater/TranslationPanel";
+import { ModelPicker } from "@/components/theater/ModelPicker";
 
 export const Route = createFileRoute("/")({ component: Index });
 export function Index() {
@@ -26,6 +27,7 @@ export function Index() {
   const transcribeKey = useSecrets(x => x.transcribeKey);
   const setTranscribeKey = useSecrets(x => x.setTranscribeKey);
   const [testing,setTesting] = useState(false);
+  const [testResult,setTestResult] = useState("");
   const p=s.settings.provider, a=s.settings.audience, g=s.settings.generation, an=s.settings.analysis;
   const toggleWeight=(group:"identities"|"tones",id:string)=> {
     const next={...a[group]};
@@ -34,12 +36,13 @@ export function Index() {
   };
   const test=async()=>{
     const valid=checkBaseUrl(p.baseUrl);
-    if(!valid.ok) { toast.error(valid.reason); return; }
-    if(!key) { toast.error("请填写 API 密钥"); return; }
+    if(!valid.ok) { setTestResult(valid.reason); toast.error(valid.reason); return; }
+    if(!key) { setTestResult("请填写 API 密钥"); toast.error("请填写 API 密钥"); return; }
     if(!window.confirm("向 "+valid.url.host+" 发送测试请求，可能产生少量费用。继续？"))return;
     setTesting(true);
-    try {const r=await (p.kind==="gemini"?geminiTest:openaiTest)(p.baseUrl,key,p.model);toast.success("连接成功 · "+r.ms+"ms");}
-    catch(e){toast.error((e as Error).message);}finally{setTesting(false);}
+    setTestResult("正在测试 "+valid.url.host+" 的模型 "+p.model+"…");
+    try {const r=await (p.kind==="gemini"?geminiTest:openaiTest)(p.baseUrl,key,p.model);setTestResult("连接成功，模型已响应 · "+r.ms+"ms");toast.success("连接成功 · "+r.ms+"ms");}
+    catch(e){const message=e instanceof Error?e.message:String(e);setTestResult(message);toast.error("测试失败，请查看下方错误详情");}finally{setTesting(false);}
   };
   return <main className="mx-auto max-w-[1440px] space-y-4 p-3 sm:p-6">
     <div className="flex flex-wrap items-center justify-between gap-2"><div><h1 className="font-display text-2xl font-bold">AI 弹幕放映室</h1><p className="text-sm text-muted-foreground">选一部视频，邀请你的虚拟观众。所有 AI 弹幕均为模拟内容。</p></div><Button variant="outline" onClick={()=>navigator.clipboard.writeText(location.origin).then(()=>toast.success("已复制链接"),()=>toast.error("复制失败"))}>分享网站</Button></div>
@@ -55,10 +58,12 @@ export function Index() {
           <div className="flex flex-wrap gap-1">{PROVIDER_PRESETS.map(x=><Button key={x.label} size="sm" variant="outline" onClick={()=>{setKey("");s.update("provider",{kind:x.kind,baseUrl:x.baseUrl,model:x.model});}}>{x.label}</Button>)}</div>
           <label className="block text-sm">接口类型 <select className="w-full rounded border bg-background p-2" value={p.kind} onChange={e=>{setKey("");s.update("provider",{kind:e.target.value==="gemini"?"gemini":"openai"});}}><option value="openai">OpenAI 兼容</option><option value="gemini">Gemini 原生</option></select></label>
           <label className="block text-sm">API 地址<Input value={p.baseUrl} onChange={e=>{setKey("");s.update("provider",{baseUrl:e.target.value});}}/></label>
-          <label className="block text-sm">模型<Input value={p.model} onChange={e=>s.update("provider",{model:e.target.value})}/></label>
+          <ModelPicker kind={p.kind} baseUrl={p.baseUrl} apiKey={key} model={p.model} onModelChange={model=>s.update("provider",{model})}/>
           <label className="block text-sm">API 密钥<Input type="password" autoComplete="off" value={key} onChange={e=>setKey(e.target.value)}/></label>
           {p.kind==="gemini"?<label className="block text-sm">输入方式 <select className="w-full rounded border bg-background p-2" value={p.geminiInput} onChange={e=>s.update("provider",{geminiInput:e.target.value==="video"?"video":"frames"})}><option value="frames">抽帧</option><option value="video">原生视频（小文件）</option></select></label>:<label className="flex gap-2 text-sm"><input type="checkbox" checked={p.jsonMode} onChange={e=>s.update("provider",{jsonMode:e.target.checked})}/>要求 JSON 模式</label>}
           <Button disabled={testing} onClick={()=>void test()}>{testing?"测试中…":"测试连接"}</Button>
+          {testResult&&<div role="status" className="rounded border border-border bg-secondary/40 p-3 text-xs break-words">{testResult}</div>}
+          <p className="text-xs text-muted-foreground">注意：模型列表和测试连接是两种不同请求。部分中转站拒绝浏览器跨域（CORS），即使 API 密钥正常也可能无法直接调用。不要将密钥填到不可信的中转网站；本站不会将密钥发送到共映服务器。</p>
           <details className="space-y-2 text-sm"><summary>音轨转录接口（可选）</summary><label>地址<Input value={p.transcribeBaseUrl} onChange={e=>{setTranscribeKey("");s.update("provider",{transcribeBaseUrl:e.target.value,transcribeUseMainKey:false});}}/></label><label>模型<Input value={p.transcribeModel} onChange={e=>s.update("provider",{transcribeModel:e.target.value})}/></label><label className="flex gap-2"><input type="checkbox" checked={p.transcribeUseMainKey} onChange={e=>s.update("provider",{transcribeUseMainKey:e.target.checked})}/>明确授权复用主密钥</label>{!p.transcribeUseMainKey&&<Input type="password" aria-label="转录密钥" value={transcribeKey} onChange={e=>setTranscribeKey(e.target.value)}/>}</details>
         </section>
         <section className="panel space-y-3 p-3"><h2 className="font-bold">虚拟观众</h2><p className="text-sm">语言（多选）</p><div className="flex flex-wrap gap-1">{LANGUAGES.map(x=><Button key={x.id} size="sm" variant={a.languages.includes(x.id)?"default":"outline"} onClick={()=>s.update("audience",{languages:a.languages.includes(x.id)?a.languages.filter(y=>y!==x.id):[...a.languages,x.id]})}>{x.label}</Button>)}</div>
