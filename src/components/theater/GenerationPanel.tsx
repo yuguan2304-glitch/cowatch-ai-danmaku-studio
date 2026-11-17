@@ -115,6 +115,31 @@ export function GenerationPanel() {
         </Button>
       </div>
 
+      {duration >= 1800 && !generating && segments.every(s => s.status !== "done") && (
+        <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
+          <div className="mb-1 font-medium">长视频省钱提速</div>
+          <p className="mb-2 text-xs text-muted-foreground">只改变后续生成：减少分段请求与发送的截图；不会额外调用 API。精细模式保持原有设置。建议先用省钱模式试一小段，检查弹幕质量。</p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => {
+              useApp.getState().update("analysis", {segmentLength: 30, frameInterval: 5});
+              useApp.getState().setSegments([]);
+              toast.info("已切换精细模式：每 30 秒一段、5 秒一帧");
+            }}>精细 · 30 秒 / 5 秒</Button>
+            <Button size="sm" variant="secondary" onClick={() => {
+              useApp.getState().update("analysis", {segmentLength: 60, frameInterval: 6});
+              useApp.getState().setSegments([]);
+              toast.success("已切换均衡模式：每 60 秒一段、6 秒一帧");
+            }}>均衡 · 60 秒 / 6 秒</Button>
+            <Button size="sm" variant="secondary" onClick={() => {
+              useApp.getState().update("analysis", {segmentLength: 90, frameInterval: 9});
+              useApp.getState().setSegments([]);
+              toast.success("已切换省钱模式：每 90 秒一段、9 秒一帧");
+            }}>省钱 · 90 秒 / 9 秒</Button>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">当前：每 {settings.analysis.segmentLength} 秒一段，每 {settings.analysis.frameInterval} 秒一帧。省钱模式可能错过短暂高能画面；正在生成或已有完成片段时不会显示切换按钮，以免破坏进度。</p>
+        </div>
+      )}
+
       {demo && <Notice tone="warn">当前显示的是「演示数据」：本地随机示例，不是对视频的 AI 分析。开始生成后会被替换。</Notice>}
 
       <div className="grid gap-2 text-xs sm:grid-cols-2">
