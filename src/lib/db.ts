@@ -1,7 +1,7 @@
-import type { HistorySession, Settings, ViewerPreset } from "./types";
+import type { HistorySession, SavedScreening, Settings, ViewerPreset } from "./types";
 
 const DB_NAME = "cowatch";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function open(): Promise<IDBDatabase> {
@@ -14,6 +14,7 @@ function open(): Promise<IDBDatabase> {
         if (!db.objectStoreNames.contains("history")) db.createObjectStore("history", { keyPath: "id" });
         if (!db.objectStoreNames.contains("presets")) db.createObjectStore("presets", { keyPath: "id" });
         if (!db.objectStoreNames.contains("kv")) db.createObjectStore("kv", { keyPath: "key" });
+        if (!db.objectStoreNames.contains("screenings")) db.createObjectStore("screenings", { keyPath: "id" });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -35,6 +36,11 @@ function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) 
 }
 
 export const db = {
+  listScreenings: async () =>
+    (await tx<SavedScreening[]>("screenings","readonly",(store)=>store.getAll())).sort((a,b)=>b.updatedAt-a.updatedAt),
+  getScreening: (id:string)=>tx<SavedScreening|undefined>("screenings","readonly",(store)=>store.get(id)),
+  putScreening: (item:SavedScreening)=>tx("screenings","readwrite",(store)=>store.put(item)),
+  deleteScreening: (id:string)=>tx("screenings","readwrite",(store)=>store.delete(id)),
   listHistory: async () =>
     (await tx<HistorySession[]>("history", "readonly", (s) => s.getAll())).sort((a, b) => b.updatedAt - a.updatedAt),
   getHistory: (id: string) => tx<HistorySession | undefined>("history", "readonly", (s) => s.get(id)),
