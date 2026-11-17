@@ -141,7 +141,7 @@ async function runSegment(seg: Segment, signal: AbortSignal) {
     .danmaku.filter((d) => !d.demo && d.time < seg.start)
     .slice(-settings.audience.memorySize);
 
-  const system = buildSystemPrompt(settings.audience, noSpoiler);
+  const system = buildSystemPrompt(settings.audience, noSpoiler, source.label, segCues);
   const userText = buildSegmentText({
     start: seg.start,
     end: seg.end,
@@ -248,6 +248,14 @@ export async function startGeneration(): Promise<void> {
   st.pushLog("info", `开始生成（${st.settings.generation.bufferMode === "full" ? "预生成全部" : "边播边生成"}），素材将发送至 ${new URL(st.settings.provider.baseUrl).host}`);
   try {
     while (!signal.aborted) {
+      const current = useApp.getState();
+      const requestLimit = current.settings.generation.requestLimit;
+      const attempted = current.segments.filter(x => x.attempts > 0).length;
+      if (requestLimit != null && attempted >= requestLimit) {
+        current.segments.filter(x => x.status === "pending" || x.status === "cancelled").forEach(x => current.updateSegment(x.index, {status:"skipped",error:"本轮请求预算已用完，可提高上限后重新开始"}));
+        current.pushLog("info", "已达到本轮 API 请求预算上限：" + requestLimit + " 个片段。");
+        break;
+      }
       const seg = pickNext();
       if (!seg) {
         const open = useApp.getState().segments.some((s) => s.status === "pending" || s.status === "cancelled");
