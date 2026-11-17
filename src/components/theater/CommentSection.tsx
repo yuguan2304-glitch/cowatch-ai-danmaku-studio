@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { MessageCircle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,6 @@ import { openaiChat } from "@/lib/ai/openai";
 import { geminiGenerate } from "@/lib/ai/gemini";
 import { extractJson } from "@/lib/ai/validate";
 
-type Comment = { id: string; name: string; text: string; liked: boolean; likes: number; replyTo?: string };
 type RawComment = { name?: unknown; text?: unknown; replyTo?: unknown };
 
 export function CommentSection() {
@@ -19,11 +18,11 @@ export function CommentSection() {
   const p = useApp(s => s.settings.provider);
   const audience = useApp(s => s.settings.audience);
   const apiKey = useSecrets(s => s.apiKey);
-  const [comments, setComments] = useState<Comment[]>([]);
+  const comments = useApp(s => s.comments);
+  const setComments = useApp(s => s.setComments);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
-  useEffect(() => { setComments([]); setDraft(""); setReplyTo(null); }, [source.src, source.youtubeId, source.bilibiliEmbed, source.label]);
 
   const send = () => {
     const text = draft.trim();
@@ -64,7 +63,7 @@ export function CommentSection() {
         await openaiChat({ baseUrl:p.baseUrl, apiKey, model:p.model, system, userText:user, images:[], imageDetail:"low", jsonMode:p.jsonMode });
       const data = extractJson(result.text) as { comments?: RawComment[] };
       if (!Array.isArray(data.comments)) throw new Error("模型未返回评论列表");
-      const generated: Comment[] = data.comments.slice(0, 10).flatMap(item => {
+      const generated: import("@/lib/types").TheaterComment[] = data.comments.slice(0, 10).flatMap(item => {
         if (typeof item?.name !== "string" || typeof item.text !== "string" || !item.text.trim()) return [];
         return [{ id: crypto.randomUUID(), name: item.name.slice(0, 30), text: item.text.slice(0, 650), likes:0, liked:false, ...(typeof item.replyTo==="string" && item.replyTo.trim()?{replyTo:item.replyTo.slice(0,30)}:{}) }];
       });
