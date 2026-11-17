@@ -73,6 +73,16 @@ export function TranslationPanel(){
      }toast.success("本轮翻译完成，可重试缺失项");
    }catch(e){if(!ctrl.signal.aborted)toast.error((e as Error).message);}finally{setBusy(false);if(abort.current===ctrl)abort.current=null;}
  };
+ const transcriptionAddress=provider.transcribeBaseUrl.trim();
+ const usingMainEndpoint=transcriptionAddress.replace(/\\/+$/, "")===provider.baseUrl.trim().replace(/\\/+$/, "");
+ const explainTranscriptionError=(error: unknown) => {
+   const message=error instanceof Error ? error.message : String(error);
+   if (/网络请求失败|Failed to fetch|NetworkError|CORS/i.test(message)) {
+     return "音轨转录连接失败。当前目标：" + transcriptionAddress + "；模型：" + provider.transcribeModel +
+       "。弹幕接口能用不代表转录接口可用。请检查下方转录专用地址、跨域权限和该站是否支持 /audio/transcriptions。浏览器无法绕过供应商的 CORS 限制。";
+   }
+   return "音轨转录失败（" + transcriptionAddress + " / " + provider.transcribeModel + "）：" + message;
+ };
  const extractAudioSubtitles=async()=>{
    const file=source.file;
    if(!file){toast.error("请先打开本地视频文件");return;}
@@ -89,7 +99,7 @@ export function TranslationPanel(){
      if(!result.timestamped){toast.error("转录结果没有时间戳，无法自动与视频对齐。请改用支持时间戳的模型。");return;}
      useApp.getState().setCues(result.cues,"AI 音轨转录");
      toast.success("提取成功！已得到 "+result.cues.length+" 段字幕。接下来点击「翻译视频字幕」。");
-   }catch(e){if(!ctrl.signal.aborted)toast.error(e instanceof Error?e.message:String(e));}
+   }catch(e){if(!ctrl.signal.aborted)toast.error(explainTranscriptionError(e),{duration:11000});}
    finally{setBusy(false);setTranscriptionProgress("");if(abort.current===ctrl)abort.current=null;}
  };
  const exportSrt=()=>{const rows=cues.map((c:Cue,i)=>[i+1,stamp(c.start)+" --> "+stamp(c.end),mode==="original"?c.text:mode==="both"?[c.text,translated[i]].filter(Boolean).join("\n"):translated[i]??c.text].join("\n"));downloadText("cowatch-subtitles.srt",rows.join("\n\n"),"text/plain");};
@@ -97,6 +107,27 @@ export function TranslationPanel(){
  <div className="rounded-lg border border-primary/30 bg-secondary/20 p-3 space-y-2">
    <p className="font-semibold text-sm">① 取得视频字幕</p>
    <p className="text-xs text-muted-foreground">{cues.length?("已准备 "+cues.length+" 段字幕，可以直接进行下一步。"):"还没有字幕。可在视频上方导入 SRT/VTT，或从本地短视频提取音轨字幕。"}</p>
+   <div className="rounded border border-border bg-background/60 p-2 text-xs space-y-2">
+     <p className="font-semibold">音轨转录使用的 API（与弹幕生成独立）</p>
+     <p className="break-all">目标：<span className="font-mono">{transcriptionAddress || "尚未填写"}/audio/transcriptions</span></p>
+     <p>模型：<span className="font-mono">{provider.transcribeModel}</span> · 密钥：{provider.transcribeUseMainKey?"复用弹幕密钥":"使用转录专用密钥"}</p>
+     {!usingMainEndpoint && <p className="text-amber-500">当前转录地址与弹幕地址不同。弹幕成功不能证明这个转录地址可用。</p>}
+     <label className="block">转录接口地址
+       <Input value={provider.transcribeBaseUrl} disabled={busy} placeholder="https://example.com/v1" onChange={e=>useApp.getState().update("provider",{transcribeBaseUrl:e.target.value})}/>
+     </label>
+     <label className="block">转录模型
+       <Input value={provider.transcribeModel} disabled={busy} placeholder="whisper-1" onChange={e=>useApp.getState().update("provider",{transcribeModel:e.target.value})}/>
+     </label>
+     <label className="flex items-center gap-2"><input type="checkbox" disabled={busy} checked={provider.transcribeUseMainKey} onChange={e=>useApp.getState().update("provider",{transcribeUseMainKey:e.target.checked})}/>使用弹幕 API 的密钥</label>
+     {!provider.transcribeUseMainKey&&<label className="block">转录专用密钥
+       <Input type="password" value={transcriptionKey} disabled={busy} onChange={e=>useSecrets.getState().setTranscribeKey(e.target.value)}/>
+     </label>}
+     <Button size="sm" type="button" variant="outline" disabled={busy||usingMainEndpoint} onClick={()=>{
+       useApp.getState().update("provider",{transcribeBaseUrl:provider.baseUrl});
+       toast.info("已复制弹幕 API 地址。注意：仍需确认供应商确实支持音频转录接口；本操作不会发送请求。");
+     }}>复制弹幕 API 地址到转录设置</Button>
+     <p className="text-muted-foreground">复制地址不等于保证可用。服务商必须开放 OpenAI 兼容的 /audio/transcriptions、支持所填模型并允许网页跨域；不满足时可导入 SRT/VTT，不会消耗转录 API 额度。</p>
+   </div>
    <Button size="sm" variant="outline" disabled={busy||source.kind!=="file"||!!cues.length} onClick={()=>void extractAudioSubtitles()}>从本地视频提取并 AI 转录字幕</Button>
    <p className="text-xs text-muted-foreground">大视频会先在本机实时生成小音频文件，再调用转录接口。十几分钟视频可能需要十几分钟，请保持应用在前台；若浏览器无法提取音轨，可改为导入 SRT/VTT。</p>
    {transcriptionProgress&&<p role="status" className="text-xs text-primary">{transcriptionProgress}</p>}
