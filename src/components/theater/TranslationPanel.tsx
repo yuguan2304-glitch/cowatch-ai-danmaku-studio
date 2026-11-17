@@ -29,7 +29,7 @@ export function TranslationPanel(){
  const [customModelHost,setCustomModelHost]=useState(()=>{
    try{return localStorage.getItem("cowatch:whisper-model-host:v1")||"";}catch{return "";}
  });
- const modelHost=modelSource==="official"?"https://huggingface.co":modelSource==="mirror"?"https://hf-mirror.com":customModelHost.trim().replace(/\\/+$/,"");
+ const modelHost=modelSource==="official"?"https://huggingface.co":modelSource==="mirror"?"https://hf-mirror.com":customModelHost.trim().replace(/\/+$/,"");
  useEffect(()=>{
    try {localStorage.setItem("cowatch:whisper-model-source:v1",modelSource);localStorage.setItem("cowatch:whisper-model-host:v1",customModelHost);}catch{/* local settings unavailable */}
  },[modelSource,customModelHost]);
