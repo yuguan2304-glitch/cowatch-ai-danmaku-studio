@@ -21,6 +21,7 @@ import { TranslationPanel } from "@/components/theater/TranslationPanel";
 import { ModelPicker } from "@/components/theater/ModelPicker";
 import { CommentSection } from "@/components/theater/CommentSection";
 import { SavedTheater } from "@/components/theater/SavedTheater";
+import { ShipControls } from "@/components/theater/ShipControls";
 
 export const Route = createFileRoute("/")({ component: Index });
 export function Index() {
@@ -88,12 +89,16 @@ export function Index() {
         </details>
         <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🎭 虚拟观众</summary><p className="text-sm">语言（多选）</p><div className="flex flex-wrap gap-1">{LANGUAGES.map(x=><Button key={x.id} size="sm" variant={a.languages.includes(x.id)?"default":"outline"} onClick={()=>s.update("audience",{languages:a.languages.includes(x.id)?a.languages.filter(y=>y!==x.id):[...a.languages,x.id]})}>{x.label}</Button>)}</div>
           <p className="text-sm">观众类型（多选）</p><div className="flex flex-wrap gap-1">{IDENTITIES.map(x=><Button key={x.id} size="sm" title={x.desc} variant={a.identities[x.id]?"default":"outline"} onClick={()=>toggleWeight("identities",x.id)}>{x.label}</Button>)}</div>
-          {Boolean(a.identities["shipper"]) && <div className="space-y-2 rounded-lg border border-primary/30 bg-secondary/30 p-3"><p className="text-sm font-bold">💞 磕学家 · 指定 CP</p><p className="text-xs text-muted-foreground">每行填写一组，例如「角色A × 角色B」。多个 CP 可以换行。只有指定的组合允许恋爱向嗑 CP；不填写就只讨论友情和人物关系，不会随机拉郎配。</p><Textarea rows={3} placeholder={"角色A × 角色B\n角色C × 角色D"} value={a.shipPairs ?? ""} onChange={e=>s.update("audience",{shipPairs:e.target.value})}/><label className="block text-xs">不想看到的 CP（可选，每行一组）<Textarea rows={2} placeholder="不希望出现的组合" value={a.blockedPairs ?? ""} onChange={e=>s.update("audience",{blockedPairs:e.target.value})}/></label></div>}
+          {Boolean(a.identities["shipper"]) && <ShipControls/>}
           <p className="text-sm">语气（多选）</p><div className="flex flex-wrap gap-1">{TONES.map(x=><Button key={x.id} size="sm" variant={a.tones[x.id]?"default":"outline"} onClick={()=>toggleWeight("tones",x.id)}>{x.label}</Button>)}</div>
+          <label className="block text-sm">🎭 自定义弹幕语气与说话方式（每行一种）
+            <Textarea rows={5} disabled={s.generating} value={a.customTones??""} placeholder={"阴阳怪气：哎哟喂，某人又开始了（）\n慢半拍：等下？我是不是漏看了啥\n熟人吐槽：别急，我知道他下一秒又要整活了"} onChange={e=>s.update("audience",{customTones:e.target.value.slice(0,6000)})}/>
+            <span className="block text-xs text-muted-foreground">可以写口癖、说话节奏、弹幕举例，每行一个风格。AI 会自然混合使用，不会逐字复读。用户指定风格会跟上面已有的语气一起生效。</span>
+          </label>
           <details className="rounded-lg border border-border p-3 space-y-2">
             <summary className="cursor-pointer font-semibold">📖 我的世界书 · 梗 / 人设 / 口癖</summary>
-            <p className="text-xs text-muted-foreground">每行一条。推荐格式：[Dream] 说话经常带点得意；[*] 所有观众可以玩这个梗。带标签的内容只在视频标题或当前字幕出现对应关键词时发送，[*] 始终生效。单次最多采用 12 条、1200 字，不会整本上传。世界书只辅助理解背景，不能伪造视频事实。</p>
-            <Textarea rows={7} value={a["worldBook"] ?? ""} disabled={s.generating} placeholder={"[Dream] 喜欢用轻快得意的语气吐槽\n[Techno] 常用冷幽默\n[*] 不要把观众设定写成实际画面"} onChange={e=>s.update("audience",{worldBook:e.target.value.slice(0,50000)})}/>
+            <p className="text-xs text-muted-foreground">**活人感建议：**用 [观众:昵称] 固定这位观众的口癖和反应习惯；[*] 表示所有观众适用；[角色名] 仅当标题或当前字幕提及角色时触发。每行一条，单次最多采用 12 条、1200 字。别把示例当成视频中真实发生的事。</p>
+            <Textarea rows={7} value={a["worldBook"] ?? ""} disabled={s.generating} placeholder={"[观众:老粉] 看见熟悉操作会先调侃两句，偶尔打个（）\n[观众:考据党] 喜欢短短补充来历，平时说话比较克制\n[Dream] 可以玩 Dream 爱炫耀的梗，但不能编造实际台词\n[*] 观众发言要有长短差异，不要所有人统一句式"} onChange={e=>s.update("audience",{worldBook:e.target.value.slice(0,50000)})}/>
             <div className="flex flex-wrap gap-2">
               <label className="rounded-md border px-2 py-1 text-sm cursor-pointer">导入 TXT / MD / JSON
                 <input type="file" accept=".txt,.md,.json,text/plain,application/json" className="hidden" disabled={s.generating} onChange={async e=>{const f=e.target.files?.[0];e.target.value="";if(!f)return;try{if(f.size>150000){toast.error("世界书文件最大 150KB");return;}let raw=await f.text();if(f.name.toLowerCase().endsWith(".json")){const data:unknown=JSON.parse(raw);if(typeof data==="string")raw=data;else if(Array.isArray(data))raw=data.map(v=>typeof v==="string"?v:(v&&typeof v==="object"?"["+String((v as Record<string,unknown>)["keyword"]??(v as Record<string,unknown>)["key"]??"*")+"] "+String((v as Record<string,unknown>)["content"]??(v as Record<string,unknown>)["text"]??""):"")).join("\n");else if(data&&typeof data==="object"){const ob=data as Record<string,unknown>;raw=typeof ob["content"]==="string"?ob["content"]:typeof ob["worldBook"]==="string"?ob["worldBook"]:JSON.stringify(data);}else throw new Error("世界书 JSON 格式无法读取");}if((a["worldBook"]??"").trim()&&!confirm("合并到已有世界书末尾？取消则不导入。"))return;s.update("audience",{worldBook:[a["worldBook"],raw].filter(Boolean).join("\n").slice(0,50000)});toast.success("世界书导入成功，已保存到本机设置");}catch(err){toast.error("导入失败："+(err instanceof Error?err.message:String(err)));}}}/>

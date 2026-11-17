@@ -62,6 +62,8 @@ export function defaultAudience(): AudienceConfig {
     globalBannedWords: "",
     extraPrompt: "",
     worldBook: "",
+    customTones: "",
+    shipRules: [],
     shipPairs: "",
     blockedPairs: "",
   };

@@ -18,6 +18,8 @@ export type CustomViewer = {
   weight: number;
 };
 
+export type ShipRule = { id: string; left: string; right: string; mode: "fixed" | "reversible" };
+
 export type AudienceConfig = {
   languages: string[];
   identities: Record<string, number>;
@@ -29,6 +31,10 @@ export type AudienceConfig = {
   extraPrompt: string;
   /** Optional local world book. Only relevant short lines are sent to AI. */
   worldBook?: string;
+  /** Custom viewer speech styles: one style per line, may include examples. */
+  customTones?: string;
+  /** Direction-aware ship rules; order is meaningful only for fixed mode. */
+  shipRules?: ShipRule[];
   /** Explicitly allowed CP pairings, separated by newline or commas. */
   shipPairs?: string;
   /** Pairings users do not want mentioned. */
