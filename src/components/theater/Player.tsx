@@ -23,6 +23,7 @@ export function Player() {
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const isHtmlVideo = source.kind === "file" || source.kind === "url";
   const [controlsVisible, setControlsVisible] = useState(true);
 
   // Use page-level cinema mode rather than the browser's native Android
@@ -121,8 +122,6 @@ export function Player() {
     if (video.paused) void video.play().catch(() => undefined);
     else video.pause();
   };
-
-  const isHtmlVideo = source.kind === "file" || source.kind === "url";
 
   useEffect(() => {
     if (!isHtmlVideo) return;
