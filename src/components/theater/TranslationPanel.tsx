@@ -185,31 +185,53 @@ export function TranslationPanel(){
      }
    }finally{setBusy(false);setTranscriptionProgress("");if(abort.current===ctrl)abort.current=null;}
  };
+ const [cloudSample,setCloudSample]=useState(true);
+ const [sameAsDanmaku,setSameAsDanmaku]=useState(true);
  const extractAudioSubtitles=async()=>{
    const file=source.file;
    if(!file){toast.error("请先打开本地视频文件");return;}
-   const baseUrl=provider.transcribeBaseUrl;
+   const baseUrl=sameAsDanmaku?provider.baseUrl:provider.transcribeBaseUrl;
    const checked=checkBaseUrl(baseUrl);
    if(!checked.ok){toast.error(checked.reason);return;}
-   const transKey=provider.transcribeUseMainKey?key:transcriptionKey;
-   if(!transKey){toast.error("尚未配置转录接口密钥。请展开「AI 接口设置 → 音轨转录接口」；如果中转站不支持音轨转录，建议直接导入 SRT/VTT。");return;}
+   const transKey=sameAsDanmaku?key:(provider.transcribeUseMainKey?key:transcriptionKey);
+   if(!transKey){toast.error("请先配置所选接口密钥；复用弹幕中转站时使用弹幕密钥。");return;}
    const large=file.size>25*1024*1024;
-   if(!confirm(large?"将从视频中实时提取压缩音频，再分段上传到 "+checked.url.host+" 转录。大致需要视频自身的时长，请保持共映在前台，可能产生 API 费用。继续？":"将视频「"+file.name+"」发送到 "+checked.url.host+" 转录，可能产生 API 费用。继续？"))return;
+   if(!confirm(cloudSample
+     ?"仅将视频开头约 30 秒的音频发送到 "+checked.url.host+" 的语音转录接口测试，可能产生费用。继续？"
+     :large?"将从视频实时提取压缩音频，分段发送到 "+checked.url.host+" 转录，可能产生费用且需要保持前台。继续？"
+     :"将视频「"+file.name+"」发送到 "+checked.url.host+" 转录，可能产生费用。继续？"))return;
    const ctrl=new AbortController();abort.current=ctrl;setBusy(true);
    try{
-     const result=await transcribeVideoWithAudioChunks({baseUrl,apiKey:transKey,model:provider.transcribeModel,file,signal:ctrl.signal,onProgress:setTranscriptionProgress});
+     const result=await transcribeVideoWithAudioChunks({baseUrl,apiKey:transKey,model:provider.transcribeModel,file,signal:ctrl.signal,maxSeconds:cloudSample?30:undefined,onProgress:setTranscriptionProgress});
      if(!result.timestamped){toast.error("转录结果没有时间戳，无法自动与视频对齐。请改用支持时间戳的模型。");return;}
-     useApp.getState().setCues(result.cues,"AI 音轨转录");
+     useApp.getState().setCues(result.cues,cloudSample?"云端转录测试（前30秒）":"AI 音轨转录");
      toast.success("提取成功！已得到 "+result.cues.length+" 段字幕。接下来点击「翻译视频字幕」。");
-   }catch(e){if(!ctrl.signal.aborted)toast.error(explainTranscriptionError(e),{duration:11000});}
+   }catch(e){if(!ctrl.signal.aborted){
+     const message=explainTranscriptionError(e);
+     toast.error(message,{duration:12000});
+   }}
    finally{setBusy(false);setTranscriptionProgress("");if(abort.current===ctrl)abort.current=null;}
  };
  const exportSrt=()=>{const rows=cues.map((c:Cue,i)=>[i+1,stamp(c.start)+" --> "+stamp(c.end),mode==="original"?c.text:mode==="both"?[c.text,translated[i]].filter(Boolean).join("\n"):translated[i]??c.text].join("\n"));downloadText("cowatch-subtitles.srt",rows.join("\n\n"),"text/plain");};
- return <details id="video-translation" className="panel scroll-mt-16 space-y-3 p-3"><summary className="cursor-pointer font-bold">🎞️ 视频 AI 字幕翻译</summary><p className="text-xs text-muted-foreground">推荐顺序：① 导入现成字幕（最省事）→ ② 本机免费识别英语（不走付费转录 API）→ ③ 付费云端转录。取得字幕后，再使用翻译 API 转成中文。长视频本机识别需保持页面前台，并可能消耗不少电量。</p>
+ return <details id="video-translation" className="panel scroll-mt-16 space-y-3 p-3"><summary className="cursor-pointer font-bold">🎞️ 视频 AI 字幕翻译</summary><p className="text-xs text-muted-foreground">推荐：导入现成字幕，或用中转站语音转录 API。先测试前 30 秒，确认成功再处理长视频；随后翻译中文字幕。</p>
  <div className="rounded-lg border border-primary/30 bg-secondary/20 p-3 space-y-2">
    <p className="font-semibold text-sm">① 取得视频字幕</p>
    <p className="text-xs text-muted-foreground">{cues.length?("已准备 "+cues.length+" 段字幕，可以直接进行下一步。"):"还没有字幕。可在视频上方导入 SRT/VTT，或从本地短视频提取音轨字幕。"}</p>
-   <div className="rounded-lg border border-primary/20 p-3 space-y-2 text-sm">
+   <div className="rounded-lg border border-primary/30 p-3 space-y-3 text-sm">
+     <p className="font-semibold">中转站语音转录（推荐）</p>
+     <label className="flex items-center gap-2"><input type="checkbox" checked={sameAsDanmaku} disabled={busy} onChange={e=>setSameAsDanmaku(e.target.checked)}/>直接使用弹幕 API 地址和密钥</label>
+     <p className="text-xs text-muted-foreground break-all">请求：{sameAsDanmaku?provider.baseUrl:provider.transcribeBaseUrl}/audio/transcriptions。聊天模型不一定能识别音频；中转站需开放语音转录端点和相应模型。</p>
+     <label className="block text-xs">转录模型 ID
+       <Input disabled={busy} value={provider.transcribeModel} placeholder="whisper-1" onChange={e=>useApp.getState().update("provider",{transcribeModel:e.target.value})}/>
+     </label>
+     <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={cloudSample} disabled={busy} onChange={e=>setCloudSample(e.target.checked)}/>先测试视频前 30 秒（可能产生一次 API 费用）</label>
+     <Button size="sm" disabled={busy||source.kind!=="file"} onClick={()=>void extractAudioSubtitles()}>{cloudSample?"测试识别前30秒":"转录整段视频"}</Button>
+     <p className="text-xs text-muted-foreground">整段转录时，大视频会在手机本地提取压缩音频，再分段传给转录 API；无需下载 Whisper 本地模型。</p>
+   </div>
+   <details className="rounded border border-border bg-background/60 p-2 text-xs space-y-2">
+     <summary className="cursor-pointer font-semibold">其他方法：本机模型识别（需额外下载大文件）</summary>
+     <div className="space-y-2 pt-2">
+
      <p className="font-semibold">优先：本机免费英语识别 <span className="text-xs font-normal text-muted-foreground">不消耗转录 API 额度</span></p>
      <p className="text-xs text-muted-foreground">手机在本地读声音，Whisper 小模型识别英语。首次需下载模型（可能数十至上百 MB），使用 CPU / 内存，速度视手机而定；之后浏览器缓存可能复用模型。音轨不会发送到语音服务商。</p>
      <div className="flex flex-wrap gap-2">
@@ -229,9 +251,10 @@ export function TranslationPanel(){
      {localModelCheck&&<p role="status" className="rounded border border-border p-2 text-xs break-words">{localModelCheck}</p>}
      {localError&&<p role="alert" className="rounded border border-destructive/40 p-2 text-xs break-words">上次识别失败：{localError}。若是模型下载失败，可先点击上方连接检测。已下载的部分资源可能留在浏览器缓存中。</p>}
      <p className="text-xs text-muted-foreground">仅对本地视频启用，支持情况依浏览器。多人说话、游戏音效与重叠对白可能识别不准；可在下方编辑字幕。字幕翻译仍可能使用收费 API。</p>
-   </div>
+     </div>
+   </details>
    <details className="rounded border border-border bg-background/60 p-2 text-xs space-y-2">
-     <summary className="cursor-pointer font-semibold">备用：付费云端音轨转录 API（高级设置）</summary>
+     <summary className="cursor-pointer font-semibold">高级配置：独立转录 API 地址和密钥</summary>
      <div className="space-y-2 pt-2">
      <p className="font-semibold">音轨转录使用的 API（与弹幕生成独立）</p>
      <p className="break-all">目标：<span className="font-mono">{transcriptionAddress || "尚未填写"}/audio/transcriptions</span></p>
@@ -255,8 +278,8 @@ export function TranslationPanel(){
      }}>复制弹幕 API 地址到转录设置</Button>
      <p className="text-muted-foreground">复制地址不等于保证可用。服务商必须开放 OpenAI 兼容的 /audio/transcriptions、支持所填模型并允许网页跨域；不满足时可导入 SRT/VTT，不会消耗转录 API 额度。</p>
    </div>
-   <Button size="sm" variant="outline" disabled={busy||source.kind!=="file"||!!cues.length} onClick={()=>void extractAudioSubtitles()}>从本地视频提取并 AI 转录字幕</Button>
-   <p className="text-xs text-muted-foreground">大视频会先本地实时提取小音频段，再发送到配置的收费转录接口；保持页面前台。</p>
+
+
    </details>
    {transcriptionProgress&&<p role="status" className="text-xs text-primary">{transcriptionProgress}</p>}
    </div>
