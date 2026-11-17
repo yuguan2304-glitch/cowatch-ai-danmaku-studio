@@ -252,8 +252,7 @@ export async function startGeneration(): Promise<void> {
       const requestLimit = current.settings.generation.requestLimit;
       const attempted = current.segments.filter(x => x.attempts > 0).length;
       if (requestLimit != null && attempted >= requestLimit) {
-        current.segments.filter(x => x.status === "pending" || x.status === "cancelled").forEach(x => current.updateSegment(x.index, {status:"skipped",error:"本轮请求预算已用完，可提高上限后重新开始"}));
-        current.pushLog("info", "已达到本轮 API 请求预算上限：" + requestLimit + " 个片段。");
+        current.pushLog("info", "已达到 API 预算上限：" + requestLimit + " 个片段。剩余片段保留为待生成；提高上限后可点继续生成。");
         break;
       }
       const seg = pickNext();
