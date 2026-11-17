@@ -54,7 +54,6 @@ export function SavedTheater() {
     if (!navigator.storage?.estimate) return;
     void navigator.storage.estimate().then(({ usage, quota }) => {
       if (usage !== undefined && quota !== undefined) {
-        storageEstimate = "";
         setStorageEstimate("本机网站存储约 " + (usage / 1024 / 1024).toFixed(0) +
           " MB / " + (quota / 1024 / 1024).toFixed(0) + " MB（浏览器估算）");
       }
