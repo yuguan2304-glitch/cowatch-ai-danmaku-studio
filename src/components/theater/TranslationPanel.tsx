@@ -398,7 +398,18 @@ export function TranslationPanel(){
    }}
    finally{setBusy(false);setTranscriptionProgress("");if(abort.current===ctrl)abort.current=null;}
  };
- const exportSrt=()=>{const rows=cues.map((c:Cue,i)=>[i+1,stamp(c.start)+" --> "+stamp(c.end),mode==="original"?c.text:mode==="both"?[c.text,translated[i]].filter(Boolean).join("\n"):translated[i]??c.text].join("\n"));downloadText("cowatch-subtitles.srt",rows.join("\n\n"),"text/plain");};
+ const buildSrt=()=>cues.map((c:Cue,i)=>[i+1,stamp(c.start)+" --> "+stamp(c.end),mode==="original"?c.text:mode==="both"?[c.text,translated[i]].filter(Boolean).join("\\n"):translated[i]??c.text].join("\\n")).join("\\n\\n");
+ const exportSrt=()=>{downloadText("cowatch-subtitles.srt",buildSrt(),"text/plain");};
+ const copySrt=async()=>{
+   if(!cues.length)return;
+   const text=buildSrt();
+   try{
+     await navigator.clipboard.writeText(text);
+     toast.success("已复制 "+cues.length+" 段字幕（"+Math.round(text.length/1024)+"KB）；请立即粘贴到手机笔记或文本文件保存。");
+   }catch{
+     toast.error("系统拒绝复制长字幕。请使用新版 APK 的「导出 SRT」；不要清除应用数据。");
+   }
+ };
  return <details id="video-translation" className="panel scroll-mt-16 space-y-3 p-3"><summary className="cursor-pointer font-bold">🎞️ 视频 AI 字幕翻译</summary><p className="text-xs text-muted-foreground">推荐：导入现成字幕，或用中转站语音转录 API。先测试前 30 秒，确认成功再处理长视频；随后翻译中文字幕。</p>
  <div className="rounded-lg border border-primary/30 bg-secondary/20 p-3 space-y-2">
    <p className="font-semibold text-sm">① 取得视频字幕</p>
@@ -544,7 +555,7 @@ export function TranslationPanel(){
    <p className="text-muted-foreground">只提交选中字幕的原文，不发送整段音频。调用付费翻译 API 前会再次确认。已翻译的选中句也可以重新翻译。</p>
  </div>}
  <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2 text-xs">已翻译 {cues.length-missingCount}/{cues.length} 条 · 尚缺 {missingCount} 条。先点「找回旧模型译文（免费）」，确认恢复完毕后再补翻缺失部分。切换弹幕模型不会要求重新翻译已保存的字幕。</div>
- <div className="flex flex-wrap gap-2">{translationMode==="all"&&<><Button size="sm" disabled={busy||!missingCount} onClick={()=>void run("cues",undefined,30)}>仅补翻缺失 30 条（最多 1 次 API 请求）</Button><Button size="sm" variant="outline" disabled={busy||!missingCount} onClick={()=>void run("cues")}>补齐剩余 {missingCount} 条（收费前确认）</Button></>}<Button size="sm" disabled={busy||!comments.length} onClick={()=>void run("comments")}>翻译弹幕文本</Button>{busy&&<Button size="sm" variant="outline" onClick={()=>abort.current?.abort()}>取消</Button>}<Button size="sm" variant="outline" disabled={!source.file||busy} onClick={()=>void restoreCachedSubtitles()}>恢复已缓存的转录（免费）</Button><Button size="sm" variant="outline" disabled={!cues.length||busy} onClick={recoverLegacyTranslations}>找回旧模型译文（免费）</Button><Button size="sm" variant="outline" disabled={!cues.length} onClick={exportSrt}>导出 SRT</Button></div>
+ <div className="flex flex-wrap gap-2">{translationMode==="all"&&<><Button size="sm" disabled={busy||!missingCount} onClick={()=>void run("cues",undefined,30)}>仅补翻缺失 30 条（最多 1 次 API 请求）</Button><Button size="sm" variant="outline" disabled={busy||!missingCount} onClick={()=>void run("cues")}>补齐剩余 {missingCount} 条（收费前确认）</Button></>}<Button size="sm" disabled={busy||!comments.length} onClick={()=>void run("comments")}>翻译弹幕文本</Button>{busy&&<Button size="sm" variant="outline" onClick={()=>abort.current?.abort()}>取消</Button>}<Button size="sm" variant="outline" disabled={!source.file||busy} onClick={()=>void restoreCachedSubtitles()}>恢复已缓存的转录（免费）</Button><Button size="sm" variant="outline" disabled={!cues.length||busy} onClick={recoverLegacyTranslations}>找回旧模型译文（免费）</Button><Button size="sm" variant="outline" disabled={!cues.length} onClick={exportSrt}>导出 SRT</Button><Button size="sm" variant="outline" disabled={!cues.length} onClick={()=>void copySrt()}>复制字幕备用（无需下载）</Button></div>
  {!cues.length&&<p className="rounded border border-border bg-secondary/40 p-2 text-sm">尚无带时间戳的视频字幕。请先在播放器上方「导入字幕 SRT/VTT」，或使用「AI 转录音轨」生成字幕。没有字幕时不能可靠地翻译音轨。</p>}
  <label className="block text-sm">视频字幕显示 <select className="rounded border bg-background p-1" value={mode} onChange={e=>setMode(e.target.value as typeof mode)}><option value="both">双语</option><option value="original">原文</option><option value="translated">译文</option><option value="off">关闭</option></select></label>
  <div className="grid gap-3 rounded border border-border bg-secondary/20 p-3 text-sm sm:grid-cols-2">
