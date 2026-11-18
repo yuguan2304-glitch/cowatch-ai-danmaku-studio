@@ -1,4 +1,4 @@
-import { useApp } from "@/lib/store";
+import { useApp, recoverLocalVideoCues } from "@/lib/store";
 import { resetVideoCache, cancelGeneration } from "@/lib/ai/generator";
 import { parseVideoUrl } from "@/lib/video-url";
 import { parseSubtitles } from "@/lib/subtitles";
@@ -20,6 +20,15 @@ export function openLocalFile(file: File): string | null {
   const src = URL.createObjectURL(file);
   currentObjectUrl = src;
   useApp.getState().setSource({ kind: "file", src, label: file.name, file, crossOrigin: false, analyzable: true });
+  // Restore a previous session's subtitle snapshot without any paid API call.
+  // Do not overwrite subtitles the user already loaded or edited meanwhile.
+  void recoverLocalVideoCues(file).then(saved=>{
+    const state=useApp.getState();
+    if(saved?.cues?.length && state.source.kind==="file" && state.source.file===file && !state.cues.length){
+      state.setCues(saved.cues,saved.label+" · 本机恢复");
+      state.pushLog("info","已自动恢复 "+saved.cues.length+" 段本机缓存字幕，无需重新转录");
+    }
+  }).catch(()=>undefined);
   return null;
 }
 
