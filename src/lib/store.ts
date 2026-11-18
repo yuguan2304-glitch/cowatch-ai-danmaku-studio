@@ -127,10 +127,13 @@ export const useApp = create<AppState>((set) => ({
 }));
 
 /**
- * API keys live in session memory only — never localStorage, IndexedDB, links or logs.
- * The optional "remember" flag only keeps provider ADDRESSES (no key) on this device.
+ * Personal-device opt-in: users can choose to store the main API key in
+ * this browser's localStorage. Default is off; never add it to sync, logs,
+ * export files, URLs or remote databases. LocalStorage is NOT encrypted.
+ * The old privacy reset uses a different v1 key and cannot delete this v3 opt-in.
  */
-const SECRET_STORAGE = "cowatch:remembered-api-key:v1";
+const SECRET_STORAGE = "cowatch:main-api-secret:v3";
+const SAVE_SECRET = "cowatch:remember-main-api-secret:v3";
 const REMEMBER_STORAGE = "cowatch:remember-api-key:v1";
 const ADDRESS_STORAGE = "cowatch:remembered-provider-addresses:v1";
 
@@ -158,33 +161,48 @@ export function syncRememberedProviderAddresses() {
   } catch { /* Storage unavailable; addresses remain session-only. */ }
 }
 
-
-function rememberedSecrets(): { apiKey: string; rememberKey: boolean } {
-  if (typeof window === "undefined") return { apiKey: "", rememberKey: false };
+function rememberedSecrets(): {apiKey:string;rememberKey:boolean;rememberSecret:boolean} {
+  if(typeof window==="undefined")return {apiKey:"",rememberKey:false,rememberSecret:false};
   try {
-    // Older versions could persist the key; wipe it so keys stay session-only.
-    localStorage.removeItem(SECRET_STORAGE);
-    return { rememberKey: localStorage.getItem(REMEMBER_STORAGE) === "yes", apiKey: "" };
-  } catch { return { apiKey: "", rememberKey: false }; }
+    // Legacy unconsented plaintext tokens are never restored.
+    localStorage.removeItem("cowatch:remembered-api-key:v1");
+    const enabled=localStorage.getItem(SAVE_SECRET)==="yes";
+    if(!enabled)localStorage.removeItem(SECRET_STORAGE);
+    const apiKey=enabled?(localStorage.getItem(SECRET_STORAGE)||""):"";
+    return {apiKey,rememberKey:localStorage.getItem(REMEMBER_STORAGE)==="yes",rememberSecret:enabled};
+  }catch{return {apiKey:"",rememberKey:false,rememberSecret:false};}
 }
-function persistSecret(_key: string, remember: boolean) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.removeItem(SECRET_STORAGE);
-    if (remember) {
-      localStorage.setItem(REMEMBER_STORAGE, "yes");
-    } else {
-      localStorage.removeItem(REMEMBER_STORAGE);
+function persistSecret(apiKey:string,rememberSecret:boolean){
+  if(typeof window==="undefined")return;
+  try{
+    if(rememberSecret&&apiKey.trim()){
+      localStorage.setItem(SECRET_STORAGE,apiKey);
+      localStorage.setItem(SAVE_SECRET,"yes");
+    }else if(!rememberSecret){
       localStorage.removeItem(SECRET_STORAGE);
+      localStorage.removeItem(SAVE_SECRET);
+    }else{
+      localStorage.removeItem(SECRET_STORAGE);
+    }
+  }catch{/* No persistence if browser storage is blocked. */}
+}
+function persistAddresses(remember:boolean) {
+  if(typeof window==="undefined")return;
+  try{
+    if(remember)localStorage.setItem(REMEMBER_STORAGE,"yes");
+    else{
+      localStorage.removeItem(REMEMBER_STORAGE);
       localStorage.removeItem(ADDRESS_STORAGE);
     }
-  } catch { /* Storage may be unavailable. The in-memory key still works. */ }
+  }catch{}
 }
 
 type SecretState = {
   apiKey: string;
   transcribeKey: string;
   rememberKey: boolean;
+  rememberSecret: boolean;
+  setRememberSecret: (remember:boolean)=>void;
   setApiKey: (k: string) => void;
   setTranscribeKey: (k: string) => void;
   setRememberKey: (remember: boolean) => void;
@@ -195,17 +213,22 @@ export const useSecrets = create<SecretState>((set, get) => ({
   ...rememberedSecrets(),
   transcribeKey: "",
   setApiKey: (apiKey) => {
-    persistSecret(apiKey, get().rememberKey);
-    set({ apiKey });
+    persistSecret(apiKey,get().rememberSecret);
+    set({apiKey});
   },
-  setTranscribeKey: (transcribeKey) => set({ transcribeKey }),
+  setTranscribeKey: (transcribeKey) => set({transcribeKey}),
   setRememberKey: (rememberKey) => {
-    persistSecret(get().apiKey, rememberKey);
+    persistAddresses(rememberKey);
+    set({rememberKey});
     syncRememberedProviderAddresses();
-    set({ rememberKey });
+  },
+  setRememberSecret: (rememberSecret) => {
+    persistSecret(get().apiKey,rememberSecret);
+    set({rememberSecret});
   },
   clearKeys: () => {
-    persistSecret("", false);
-    set({ apiKey: "", transcribeKey: "", rememberKey: false });
+    persistSecret("",false);
+    persistAddresses(false);
+    set({apiKey:"",transcribeKey:"",rememberKey:false,rememberSecret:false});
   },
 }));
