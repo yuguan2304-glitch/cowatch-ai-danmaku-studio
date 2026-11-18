@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { defaultSettings } from "./constants";
 import { uid } from "./id";
+import { db } from "./db";
 import type { Cue, Danmaku, Segment, Settings, TheaterComment, VideoSource } from "./types";
 
 // One-time privacy reset: previous remembered keys, endpoints and model selection
@@ -18,6 +19,14 @@ export function resetOldCredentialsOnce(): boolean {
 // Run before Zustand initializes its API-key state.
 const oldCredentialsResetThisLoad = resetOldCredentialsOnce();
 export function needsOldCredentialMigration(): boolean { return oldCredentialsResetThisLoad; }
+
+/** Stable per-file subtitle backup, independent of which speech/translation model is selected. */
+export function subtitleBackupKey(file:File):string {
+  return "cowatch:subtitle-backup:v1:"+JSON.stringify([file.name,file.size,file.lastModified]);
+}
+export async function recoverLocalVideoCues(file:File):Promise<{cues:Cue[];label:string}|undefined> {
+  return db.getLocalValue<{cues:Cue[];label:string}>(subtitleBackupKey(file));
+}
 
 const emptySource: VideoSource = { kind: "none", src: "", label: "", crossOrigin: false, analyzable: false };
 
@@ -100,7 +109,16 @@ export const useApp = create<AppState>((set) => ({
     }),
   patchSource: (p) => set((st) => ({ source: { ...st.source, ...p } })),
   setDuration: (duration) => set({ duration }),
-  setCues: (cues, cueLabel) => set({ cues, cueLabel }),
+  setCues: (cues, cueLabel) => {
+    set({ cues, cueLabel });
+    const source=useApp.getState().source;
+    if(source.kind==="file" && source.file && cues.length) {
+      // Never store video bytes or API keys. Save each new subtitle snapshot locally.
+      void db.putLocalValue(subtitleBackupKey(source.file),{cues:[...cues],label:cueLabel}).catch(()=>
+        useApp.getState().pushLog("warn","字幕本地备份失败；请检查设备空间并导出 SRT")
+      );
+    }
+  },
   setDanmaku: (danmaku, demo = false) => set({ danmaku: [...danmaku].sort((a, b) => a.time - b.time), demo }),
   setComments: (next) => set(st => ({ comments: typeof next === "function" ? next(st.comments) : next })),
   setSavedScreeningId: (savedScreeningId) => set({ savedScreeningId }),
