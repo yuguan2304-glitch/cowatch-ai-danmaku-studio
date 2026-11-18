@@ -15,6 +15,28 @@ export function AppUpdateButton(){
   const [available,setAvailable]=useState<Update|null>(null);
   const [autoWeb,setAutoWeb]=useState(false);
   const [checking,setChecking]=useState(false);
+  const [assetSource,setAssetSource]=useState<"online"|"offline"|"unknown">(()=>{
+    const w=window as Window & {__cowatchAssetSource?:"online"|"offline"|"unknown"};
+    return w.__cowatchAssetSource??"unknown";
+  });
+  useEffect(()=>{
+    const handler=(event:Event)=>{
+      const source=(event as CustomEvent<string>).detail;
+      if(source==="online"||source==="offline"||source==="unknown")setAssetSource(source);
+    };
+    window.addEventListener("cowatch:asset-source",handler);
+    return()=>window.removeEventListener("cowatch:asset-source",handler);
+  },[]);
+  const refreshWeb=()=>{
+    const native=updater();
+    if(native){
+      native.postMessage(JSON.stringify({action:"refresh-web"}));
+      toast.info("已向安卓请求检查在线功能；若当前安装版不支持，请用网页版验证新版。");
+      return;
+    }
+    toast.info("正在重新读取网页资源。若仍是旧版，请检查安卓安装包的原生更新能力。");
+    window.location.replace("/index.html?cowatch_refresh="+Date.now());
+  };
   async function check(showFeedback:boolean){
     if(checking)return;
     setChecking(true);
@@ -76,9 +98,14 @@ export function AppUpdateButton(){
     }
   };
   return <div className="flex items-center gap-1">
-    {autoWeb?<button type="button" onClick={()=>window.location.reload()} title={"共映 Alpha "+installed+" · 网页功能在线获取新版；离线时回退到内置版本"} className="flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1.5 text-xs text-primary">
-      <DownloadCloud className="size-4"/> 刷新功能（免安装）
-    </button>:available?<button type="button" onClick={install} title={"版本 "+installed+" → "+available.build+"；更新后数据保留"} className="flex items-center gap-1 rounded-md bg-primary/15 px-2 py-1.5 text-xs font-semibold text-primary">
+    {autoWeb?<div className="flex items-center gap-1">
+      <span className={"rounded px-1 py-0.5 text-[10px] "+(assetSource==="online"?"text-emerald-500":assetSource==="offline"?"text-amber-500":"text-muted-foreground")} title="由安卓原生加载器报告当前界面来源">
+        {assetSource==="online"?"在线版":assetSource==="offline"?"离线版":"版本待确认"}
+      </span>
+      <button type="button" onClick={refreshWeb} title={"共映 Alpha "+installed+" · 强制检查在线资源；失败不删除本地数据"} className="flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1.5 text-xs text-primary">
+        <DownloadCloud className="size-4"/> 检查在线功能
+      </button>
+    </div>:available?<button type="button" onClick={install} title={"版本 "+installed+" → "+available.build+"；更新后数据保留"} className="flex items-center gap-1 rounded-md bg-primary/15 px-2 py-1.5 text-xs font-semibold text-primary">
       <DownloadCloud className="size-4"/> 更新 {available.build}
     </button>:<button type="button" onClick={()=>void check(true)} disabled={checking} title={"当前安卓 Alpha "+installed+" · 点击检查更新"} className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-muted-foreground">
       <DownloadCloud className="size-4"/>{checking?"检查…":"检查更新"}
