@@ -74,6 +74,10 @@ jobs:
               -storepass android -alias androiddebugkey -keypass android \
               -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
           fi
+      - name: Verify restored signing keystore identity
+        run: |
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey |
+            grep 'SHA256:'
       - name: Build original online Android APK
         env:
           COWATCH_VERSION_CODE: ${{ github.run_number }}
@@ -97,7 +101,10 @@ jobs:
           "$AAPT" dump badging cowatch-android-alpha.apk | grep "^package: name='dev.cowatch.player' "
           "$AAPT" dump badging cowatch-android-alpha-preview.apk | grep "^package: name='dev.cowatch.player.alpha.stable2026' "
           "$SIGNER" verify --verbose --print-certs cowatch-android-alpha-preview.apk | grep -E 'Verified using|Signer #1 certificate SHA-256 digest'
-          echo "PASS: APK identity and signing inspected before release"
+          EXPECTED=$(keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sed -n 's/.*SHA256: //p' | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          ACTUAL=$("$SIGNER" verify --print-certs cowatch-android-alpha-preview.apk | sed -n 's/.*Signer #1 certificate SHA-256 digest: //p' | head -1)
+          test -n "$EXPECTED" && test "$EXPECTED" = "$ACTUAL" || { echo "FAILED: APK did not use cached signing keystore"; exit 1; }
+          echo "PASS: APK identity and signing match the restored keystore"
       - name: Upload both APKs
         uses: actions/upload-artifact@v4
         with:
