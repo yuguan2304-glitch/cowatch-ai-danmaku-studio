@@ -22,6 +22,11 @@ import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 import androidx.webkit.WebViewAssetLoader;
 import java.io.OutputStream;
+import java.io.InputStream;
+import java.io.FilterInputStream;
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import org.json.JSONObject;
@@ -61,6 +66,10 @@ public final class MainActivity extends Activity {
     private long updateDownloadId = -1L;
     private BroadcastReceiver updateReceiver;
     private WebViewAssetLoader localAssetLoader;
+    // Live first-party HTML/JS/CSS updates use the SAME appassets origin as saved data.
+    // This keeps IndexedDB and localStorage intact while retaining offline files as fallback.
+    private volatile boolean liveAssetsReady = false;
+    private volatile boolean liveAssetsDecided = false;
     private FrameLayout root;
     private LinearLayout connectionErrorView;
     private long loadSequence = 0;
@@ -122,7 +131,28 @@ public final class MainActivity extends Activity {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 if (localAssetLoader != null && "https".equals(request.getUrl().getScheme())
                     && TRUSTED_HOST.equals(request.getUrl().getHost())) {
-                    return localAssetLoader.shouldInterceptRequest(request.getUrl());
+                    Uri uri=request.getUrl();
+                    String path=uri.getEncodedPath();
+                    // Keep the bundled build marker local so the native updater still works.
+                    if ("/cowatch-build.json".equals(path)) return localAssetLoader.shouldInterceptRequest(uri);
+                    if ("/index.html".equals(path) || "/".equals(path)) {
+                        // The first page request decides online/offline mode for this launch.
+                        WebResourceResponse live=tryLiveAsset("/index.html");
+                        liveAssetsReady=live!=null;
+                        liveAssetsDecided=true;
+                        if(live!=null)return live;
+                        return localAssetLoader.shouldInterceptRequest(uri);
+                    }
+                    if(liveAssetsDecided && liveAssetsReady) {
+                        WebResourceResponse live=tryLiveAsset(path);
+                        if(live!=null)return live;
+                        // Only static assets from the same release are valid. Mixing them
+                        // with an older bundled JS build could silently corrupt the page.
+                        if(path!=null && path.startsWith("/assets/"))
+                            return new WebResourceResponse("text/plain","UTF-8",503,"暂时无法获取新版资源",
+                                new java.util.HashMap<String,String>(),new java.io.ByteArrayInputStream("请重启共映以切换到离线版本".getBytes(StandardCharsets.UTF_8)));
+                    }
+                    return localAssetLoader.shouldInterceptRequest(uri);
                 }
                 return super.shouldInterceptRequest(view, request);
             }
@@ -329,6 +359,56 @@ public final class MainActivity extends Activity {
         if (state == null) webView.loadUrl(HOME_URL);
         else webView.restoreState(state);
         handler.postDelayed(detectCinema, 500);
+    }
+
+    /**
+     * Only first-party public application assets are fetched. We never proxy API
+     * keys, user uploads, request bodies, or third-party hosts through this layer.
+     * A page always runs under appassets.androidplatform.net, preserving its
+     * previous IndexedDB, saved videos, and preferences between web updates.
+     */
+    private WebResourceResponse tryLiveAsset(String encodedPath) {
+        if (!BuildConfig.OFFLINE_BUNDLE || encodedPath == null ||
+            encodedPath.contains("..") || encodedPath.contains("%") ||
+            !(encodedPath.equals("/") || encodedPath.equals("/index.html") ||
+              encodedPath.startsWith("/assets/") ||
+              encodedPath.equals("/favicon.ico") ||
+              encodedPath.equals("/manifest.webmanifest") ||
+              encodedPath.equals("/robots.txt"))) return null;
+        HttpURLConnection connection=null;
+        try {
+            URL remote=new URL(ONLINE_URL.replaceAll("/+$","")+encodedPath);
+            connection=(HttpURLConnection)remote.openConnection();
+            connection.setConnectTimeout(7000);
+            connection.setReadTimeout(12000);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestMethod("GET");
+            connection.setRequestProperty("Accept","*/*");
+            connection.setRequestProperty("User-Agent","CoWatch-Android-AutoWeb/1.0");
+            int code=connection.getResponseCode();
+            if(code!=200){connection.disconnect();return null;}
+            String type=connection.getContentType();
+            String mime="application/octet-stream";
+            if(type!=null){mime=type.split(";")[0].trim();}
+            if(encodedPath.endsWith(".html")||encodedPath.equals("/"))mime="text/html";
+            if(encodedPath.endsWith(".js"))mime="text/javascript";
+            if(encodedPath.endsWith(".css"))mime="text/css";
+            final HttpURLConnection hold=connection;
+            InputStream input=new FilterInputStream(connection.getInputStream()){
+                @Override public void close() throws IOException {
+                    try {super.close();} finally {hold.disconnect();}
+                }
+            };
+            java.util.HashMap<String,String> headers=new java.util.HashMap<>();
+            headers.put("Cache-Control","no-cache");
+            headers.put("X-Content-Type-Options","nosniff");
+            return new WebResourceResponse(mime,
+                mime.startsWith("text/")||mime.contains("json")?"UTF-8":null,
+                200,"OK",headers,input);
+        }catch(Exception error){
+            if(connection!=null)connection.disconnect();
+            return null;
+        }
     }
 
     private void downloadAppUpdate(String url){
