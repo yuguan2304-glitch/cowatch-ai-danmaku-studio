@@ -398,7 +398,7 @@ export function TranslationPanel(){
    }}
    finally{setBusy(false);setTranscriptionProgress("");if(abort.current===ctrl)abort.current=null;}
  };
- const buildSrt=()=>cues.map((c:Cue,i)=>[i+1,stamp(c.start)+" --> "+stamp(c.end),mode==="original"?c.text:mode==="both"?[c.text,translated[i]].filter(Boolean).join("\\n"):translated[i]??c.text].join("\\n")).join("\\n\\n");
+ const buildSrt=()=>cues.map((c:Cue,i)=>[i+1,stamp(c.start)+" --> "+stamp(c.end),mode==="original"?c.text:mode==="both"?[c.text,translated[i]].filter(Boolean).join("\n"):translated[i]??c.text].join("\n")).join("\n\n");
  const exportSrt=()=>{downloadText("cowatch-subtitles.srt",buildSrt(),"text/plain");};
  const copySrt=async()=>{
    if(!cues.length)return;
