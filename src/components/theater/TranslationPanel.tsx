@@ -80,7 +80,10 @@ export function TranslationPanel(){
      saveTranscriptionKey("",false);
    }
  },[settingsLoaded,rememberTranscription,rememberTranscriptionKey,provider.transcribeBaseUrl,provider.transcribeModel,provider.transcribeUseMainKey,transcriptionKey,transcribePreset]);
- useEffect(()=>{setTranslated({});abort.current?.abort();},[cues,target,session]);
+ // Partial transcription updates cues after every successful chunk. Do not
+ // cancel the active transcription merely because cues have grown.
+ useEffect(()=>{setTranslated({});},[cues,target,session]);
+ useEffect(()=>{abort.current?.abort();},[session]);
  useEffect(()=>{setCommentTranslations({});abort.current?.abort();},[target,session]);
  useEffect(()=>{const timer=window.setInterval(()=>setTime(getClock()?.getTime()??0),200);return()=>{clearInterval(timer);abort.current?.abort();};},[]);
  const cacheId=(kind:string,text:string)=>JSON.stringify([kind,target,service,service==="custom"?translationUrl:service==="shared"?provider.baseUrl:"google",service==="custom"?translationModel:service==="shared"?provider.model:"nmt",service==="google"?"":glossary,text]);
