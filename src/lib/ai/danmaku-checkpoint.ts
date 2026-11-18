@@ -9,7 +9,9 @@ export type DanmakuCheckpoint = {
 };
 
 async function sha256(bytes: Uint8Array): Promise<string> {
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  const copy = new Uint8Array(new ArrayBuffer(bytes.byteLength));
+  copy.set(bytes);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", copy));
   return Array.from(digest, b => b.toString(16).padStart(2, "0")).join("");
 }
 
