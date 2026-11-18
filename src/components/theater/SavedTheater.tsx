@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookmarkPlus, Clapperboard, Heart, Play, Trash2, RefreshCw, Download, Upload } from "lucide-react";
 import { exportScreeningPackage, importScreeningPackage } from "@/lib/screening-package";
+import { exportDeviceTransfer, importDeviceTransfer } from "@/lib/device-transfer";
+import { downloadText } from "@/lib/export";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
@@ -50,6 +52,7 @@ export function SavedTheater() {
     catch { toast.error("无法读取本机放映收藏。请确认浏览器允许保存网站数据。"); }
   }, []);
   useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => { const handler = () => {void reload();}; window.addEventListener("cowatch:records-updated", handler); return () => window.removeEventListener("cowatch:records-updated", handler); }, [reload]);
   useEffect(() => {
     if (!navigator.storage?.estimate) return;
     void navigator.storage.estimate().then(({ usage, quota }) => {
@@ -127,6 +130,41 @@ export function SavedTheater() {
     document.getElementById("cowatch-player-top")?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const exportTransfer = async () => {
+    if (generating) {toast.error("请先停止生成后备份，避免漏掉最新弹幕");return;}
+    setBusy(true);
+    try {
+      const result = await exportDeviceTransfer();
+      downloadText("cowatch-sync.json", result.text, "application/json");
+      toast.success("设备迁移包已导出：含 " + result.history + " 条历史、" + result.screenings + " 部收藏。不含视频原文件和 API 密钥。");
+    } catch(error) {
+      toast.error("导出失败：" + (error instanceof Error ? error.message : String(error)));
+    } finally {setBusy(false);}
+  };
+  const importTransfer = async (file: File) => {
+    if (generating) {toast.error("请先停止生成弹幕");return;}
+    if (!window.confirm("将此设备迁移包合并到本机：保留本机现有记录，同编号优先采用较新的记录；使用导入的观众与生成偏好，但保留本机 API 密钥与接口地址。继续？"))return;
+    setBusy(true);
+    try {
+      const result = await importDeviceTransfer(file);
+      await reload();
+      toast.success("迁移完成：历史 " + result.history + " 条、预设 " + result.presets + " 组、收藏 " + result.screenings + " 部。缺少视频文件的收藏可在此补充视频。",{duration:9000});
+    } catch(error) {
+      toast.error("迁移失败：" + (error instanceof Error ? error.message : String(error)));
+    } finally {setBusy(false);}
+  };
+  const attachVideo = async (item: SavedScreening, file: File) => {
+    if (generating) {toast.error("请先停止生成弹幕");return;}
+    if (!file.type.startsWith("video/") && !/\\.(mp4|webm|mov|m4v|mkv|ogv)$/i.test(file.name)) {toast.error("请选择视频文件");return;}
+    if (item.sourceLabel && file.name !== item.sourceLabel && !window.confirm("视频文件名与原收藏不同，时间轴可能无法匹配，仍要关联吗？"))return;
+    setBusy(true);
+    try {
+      await db.putScreening({...item,file,sourceLabel:file.name,updatedAt:Date.now()});
+      await reload();
+      toast.success("已关联视频文件，原来的弹幕和字幕不会重新生成");
+    }catch{toast.error("保存视频文件失败，可能是本机空间不足");}
+    finally{setBusy(false);}
+  };
   const importPackage = async (file: File) => {
     if (generating) { toast.error("请先停止生成弹幕"); return; }
     setBusy(true);
@@ -173,7 +211,8 @@ export function SavedTheater() {
           {!compact && <p className="text-xs text-muted-foreground">{new Date(item.updatedAt).toLocaleDateString("zh-CN")} · {item.sourceKind === "file" ? "本地视频" : "外链视频"}</p>}
         </div>
       </button>
-      {!compact && <div className="flex justify-end gap-1 border-t border-border px-2 py-1">\n        {item.sourceKind === "file" && item.file && <Button size="sm" variant="outline" onClick={() => { try { exportScreeningPackage(item); toast.success("已开始导出完整放映包"); } catch (error) { toast.error((error as Error).message); } }}><Download className="size-3.5"/> 导出放映包</Button>}
+      {!compact && <div className="flex flex-wrap justify-end gap-1 border-t border-border px-2 py-1">
+        {item.sourceKind === "file" && !item.file && <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs">补充本地视频 <input type="file" accept="video/*,.mkv,.mov,.m4v,.ogv" className="sr-only" disabled={busy||generating} onChange={e=>{const f=e.target.files?.[0];if(f)void attachVideo(item,f);e.target.value="";}}/></label>}\n        {item.sourceKind === "file" && item.file && <Button size="sm" variant="outline" onClick={() => { try { exportScreeningPackage(item); toast.success("已开始导出完整放映包"); } catch (error) { toast.error((error as Error).message); } }}><Download className="size-3.5"/> 导出放映包</Button>}
         <Button size="sm" variant="ghost" onClick={() => void remove(item)}><Trash2 className="size-3.5"/> 删除收藏</Button>
       </div>}
     </div>
@@ -190,6 +229,11 @@ export function SavedTheater() {
           e.target.value = "";
         }}/>
       </label>
+      <Button size="sm" variant="outline" disabled={busy||generating} onClick={()=>void exportTransfer()}><Download className="size-3.5"/> PC→手机迁移包</Button>
+      <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-medium hover:bg-secondary">
+        <Upload className="size-3.5"/>导入设备迁移包
+        <input className="sr-only" type="file" accept=".json" disabled={busy || generating} onChange={e=>{const f=e.target.files?.[0];if(f)void importTransfer(f);e.target.value="";}}/>
+      </label>
       <Button size="sm" variant="marquee" disabled={source.kind === "none" || generating || busy} onClick={() => void save()}><BookmarkPlus className="size-4"/>{busy ? "保存中…" : savedId ? "更新这场放映" : "收藏这场放映"}</Button>
     </div>
     {!records.length ? <div className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">这里将成为你的私人观影首页。先选一个视频，生成弹幕和评论，再点「收藏这场放映」就能拥有第一张推荐卡片啦！🍿</div> : <>
@@ -200,6 +244,7 @@ export function SavedTheater() {
         <Button size="sm" variant="ghost" onClick={() => void reload()}><RefreshCw className="size-4"/> 刷新收藏</Button>
       </details>
     </>}
+    <p className="text-xs text-muted-foreground">设备迁移包可将 PC 上的观众设置、世界书、生成历史、收藏弹幕与字幕合并到手机，不重复调用 AI。迁移包不包含原视频、API 密钥和私密中转站地址；需要把原视频复制到手机后点「补充本地视频」，或单独导入完整 .cowatch 放映包。此功能是手动迁移，不是实时云同步。</p>
     {storageEstimate && <p className="text-xs text-muted-foreground">{storageEstimate}</p>}\n    <p className="text-xs text-muted-foreground">支持导出和导入 .cowatch 完整放映包。断网启动需先联网打开新版共映至少一次，让离线网页资源完成缓存。仅本地文件可以完整离线播放；外链仍需网络。 </p>\n    <p className="text-xs text-muted-foreground">这些都是你自己保存的放映记录，推荐卡片只从本机收藏中轮换，不是其他人的真实投稿。本地视频会占用设备存储；切换浏览器、卸载 App 或清除网站数据可能导致收藏丢失。修改弹幕后记得点「更新这场放映」。</p>
   </section>;
 }
