@@ -37,6 +37,12 @@ async function sync(req:Request,env:Env):Promise<Response>{
   const owner=await sha256(auth.slice(7));
   try {
     if(req.method==="GET"){
+      const knownRaw=new URL(req.url).searchParams.get("knownVersion");
+      const known=knownRaw===null?null:Number(knownRaw);
+      if(known!==null && Number.isSafeInteger(known) && known>0){
+        const state=await env.SYNC_DB.prepare("SELECT version FROM sync_vaults WHERE owner_hash=?").bind(owner).first<{version:number}>();
+        if(state?.version===known)return json(req,{version:known,unchanged:true});
+      }
       const r=await env.SYNC_DB.prepare("SELECT ciphertext,version,updated_at FROM sync_vaults WHERE owner_hash=?").bind(owner).first<{ciphertext:string;version:number;updated_at:number}>();
       if(!r)return json(req,{version:0,ciphertext:null});
       return json(req,{version:r.version,ciphertext:r.ciphertext,updatedAt:r.updated_at});
