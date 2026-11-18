@@ -17,7 +17,7 @@ function cors(req:Request):Headers {
   if(allowedOrigins.has(origin)){
     h.set("Access-Control-Allow-Origin",origin);
     h.set("Access-Control-Allow-Headers","Authorization, Content-Type");
-    h.set("Access-Control-Allow-Methods","GET,PUT,OPTIONS");
+    h.set("Access-Control-Allow-Methods","GET,PUT,DELETE,OPTIONS");
   }
   return h;
 }
@@ -31,7 +31,7 @@ async function sha256(value:string):Promise<string>{
 }
 async function sync(req:Request,env:Env):Promise<Response>{
   if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(req)});
-  if(req.method!=="GET"&&req.method!=="PUT")return json(req,{error:"Method not allowed"},405);
+  if(req.method!=="GET"&&req.method!=="PUT"&&req.method!=="DELETE")return json(req,{error:"Method not allowed"},405);
   const auth=req.headers.get("Authorization")||"";
   if(!/^Bearer [A-Za-z0-9_-]{43}$/.test(auth))return json(req,{error:"请先在设备上设置安全同步码"},401);
   const owner=await sha256(auth.slice(7));
@@ -40,6 +40,14 @@ async function sync(req:Request,env:Env):Promise<Response>{
       const r=await env.SYNC_DB.prepare("SELECT ciphertext,version,updated_at FROM sync_vaults WHERE owner_hash=?").bind(owner).first<{ciphertext:string;version:number;updated_at:number}>();
       if(!r)return json(req,{version:0,ciphertext:null});
       return json(req,{version:r.version,ciphertext:r.ciphertext,updatedAt:r.updated_at});
+    }
+    if(req.method==="DELETE"){
+      let data:{expectedVersion?:number};
+      try{data=await req.json() as {expectedVersion?:number};}catch{return json(req,{error:"缺少删除版本号"},400);}
+      if(!Number.isSafeInteger(data.expectedVersion)||Number(data.expectedVersion)<=0)return json(req,{error:"版本号无效"},400);
+      const out=await env.SYNC_DB.prepare("DELETE FROM sync_vaults WHERE owner_hash=? AND version=?").bind(owner,data.expectedVersion).run();
+      if(!(out.meta?.changes||0))return json(req,{error:"删除冲突，云端可能已有更新"},409);
+      return json(req,{deleted:true});
     }
     const sizeHeader=Number(req.headers.get("Content-Length")||0);
     if(sizeHeader>MAX_PAYLOAD)return json(req,{error:"同步数据超过 2MB 限额，请缩减收藏元信息"},413);
