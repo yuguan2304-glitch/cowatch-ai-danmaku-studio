@@ -137,7 +137,8 @@ public final class MainActivity extends Activity {
                     if ("/cowatch-build.json".equals(path)) return localAssetLoader.shouldInterceptRequest(uri);
                     if ("/index.html".equals(path) || "/".equals(path)) {
                         // The first page request decides online/offline mode for this launch.
-                        WebResourceResponse live=tryLiveAsset("/index.html");
+                        // Fetch canonical root: Cloudflare can redirect /index.html to /.
+                        WebResourceResponse live=tryLiveAsset("/");
                         liveAssetsReady=live!=null;
                         liveAssetsDecided=true;
                         if(live!=null)return live;
@@ -387,6 +388,22 @@ public final class MainActivity extends Activity {
             connection.setRequestProperty("Accept","*/*");
             connection.setRequestProperty("User-Agent","CoWatch-Android-AutoWeb/1.0");
             int code=connection.getResponseCode();
+            if((code==301||code==302||code==307||code==308) && encodedPath.equals("/")){
+                String location=connection.getHeaderField("Location");
+                if(location!=null){
+                    URL next=new URL(remote,location);
+                    if(next.getProtocol().equals("https")&&next.getHost().equals(remote.getHost())
+                       &&next.getPath().equals("/")){
+                        connection.disconnect();
+                        connection=(HttpURLConnection)next.openConnection();
+                        connection.setConnectTimeout(7000);
+                        connection.setReadTimeout(12000);
+                        connection.setInstanceFollowRedirects(false);
+                        connection.setRequestProperty("User-Agent","CoWatch-Android-AutoWeb/1.0");
+                        code=connection.getResponseCode();
+                    }
+                }
+            }
             if(code!=200){connection.disconnect();return null;}
             String type=connection.getContentType();
             String mime="application/octet-stream";
