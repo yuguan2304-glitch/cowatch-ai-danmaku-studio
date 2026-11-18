@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:allowBackup="false"
-        android:label="共映 CoWatch"
+        android:label="@string/cowatch_app_name"
         android:icon="@drawable/ic_cowatch"
         android:usesCleartextTraffic="false"
         android:theme="@style/CoWatchTheme">
