@@ -52,6 +52,8 @@ export function TranslationPanel(){
  const settingsLoaded=useApp(s=>s.settingsLoaded);
  const [target,setTarget]=useState(()=>loadTranslationPrefs()?.target??"简体中文"),[glossary,setGlossary]=useState(()=>loadTranslationPrefs()?.glossary??""),[commentTranslations,setCommentTranslations]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[time,setTime]=useState(0);
  const mode=useSubtitleDisplay(s=>s.mode),setMode=useSubtitleDisplay(s=>s.setMode),translated=useSubtitleDisplay(s=>s.translated),setTranslated=useSubtitleDisplay(s=>s.setTranslated),mergeTranslated=useSubtitleDisplay(s=>s.mergeTranslated);
+ const originalFontSize=useSubtitleDisplay(s=>s.originalFontSize),translatedFontSize=useSubtitleDisplay(s=>s.translatedFontSize);
+ const setOriginalFontSize=useSubtitleDisplay(s=>s.setOriginalFontSize),setTranslatedFontSize=useSubtitleDisplay(s=>s.setTranslatedFontSize);
  const abort=useRef<AbortController|null>(null);
  useEffect(()=>{
    saveTranslationPrefs({service,url:translationUrl,model:translationModel,target,glossary,rememberSecret:rememberTranslationKey});
@@ -261,6 +263,7 @@ export function TranslationPanel(){
        <p className="text-xs break-all">当前地址：{provider.transcribeBaseUrl}/audio/transcriptions · 模型：{provider.transcribeModel}</p>
      </>}
      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={cloudSample} disabled={busy} onChange={e=>setCloudSample(e.target.checked)}/>先测试视频前 30 秒（可能产生一次 API 费用）</label>
+     {!cloudSample&&<p className="rounded border border-primary/30 bg-secondary/30 p-2 text-xs">整段识别模式已开启：会处理完整视频的音轨。较长视频将在手机上按约 3 分钟一段提取，须保持共映在前台；关掉应用可能中断录制。整段成功后会替换当前试用的前 30 秒字幕。</p>}
      <Button size="sm" disabled={busy||source.kind!=="file"} onClick={()=>void extractAudioSubtitles()}>{cloudSample?"测试识别前30秒":"转录整段视频"}</Button>
      {source.kind!=="file" && <p role="status" className="text-xs text-amber-500">⚠️ 按钮不可点击：请先关闭设置，在播放器上方选择「打开本地视频」并等待视频加载成功。在线视频链接不支持直接提取音轨。</p>}
      <p className="text-xs text-muted-foreground">整段转录时，大视频会在手机本地提取压缩音频，再分段传给转录 API；无需下载 Whisper 本地模型。</p>
@@ -333,8 +336,17 @@ export function TranslationPanel(){
  <div className="flex flex-wrap gap-2"><Button size="sm" disabled={busy||!cues.length} onClick={()=>void run("cues")}>一键翻译视频字幕（{cues.length} 段）</Button><Button size="sm" disabled={busy||!comments.length} onClick={()=>void run("comments")}>翻译弹幕文本</Button>{busy&&<Button size="sm" variant="outline" onClick={()=>abort.current?.abort()}>取消</Button>}<Button size="sm" variant="outline" disabled={!cues.length} onClick={exportSrt}>导出 SRT</Button></div>
  {!cues.length&&<p className="rounded border border-border bg-secondary/40 p-2 text-sm">尚无带时间戳的视频字幕。请先在播放器上方「导入字幕 SRT/VTT」，或使用「AI 转录音轨」生成字幕。没有字幕时不能可靠地翻译音轨。</p>}
  <label className="block text-sm">视频字幕显示 <select className="rounded border bg-background p-1" value={mode} onChange={e=>setMode(e.target.value as typeof mode)}><option value="both">双语</option><option value="original">原文</option><option value="translated">译文</option><option value="off">关闭</option></select></label>
+ <div className="grid gap-3 rounded border border-border bg-secondary/20 p-3 text-sm sm:grid-cols-2">
+   <label className="flex flex-col gap-2">原文字幕大小：{originalFontSize}px
+     <input className="w-full accent-amber-500" type="range" min="10" max="32" step="1" value={originalFontSize} onChange={e=>setOriginalFontSize(Number(e.target.value))}/>
+   </label>
+   <label className="flex flex-col gap-2">翻译字幕大小：{translatedFontSize}px
+     <input className="w-full accent-amber-500" type="range" min="10" max="32" step="1" value={translatedFontSize} onChange={e=>setTranslatedFontSize(Number(e.target.value))}/>
+   </label>
+   <p className="text-xs text-muted-foreground sm:col-span-2">两种字幕分别调节（10–32px）；修改立即影响播放器及横屏全屏，设置保存在本机，不增加 API 费用。</p>
+ </div>
  <p className="text-xs text-muted-foreground">字幕会直接覆盖在播放器画面下方，横屏全屏也可查看。以下是当前时间的字幕预览。</p>
- {mode!=="off"&&<div className="min-h-14 rounded bg-black p-2 text-center text-white">{active>=0&&<>{mode!=="translated"&&<div>{cues[active]?.text}</div>}{mode!=="original"&&<div>{translated[active]??(mode==="translated"?cues[active]?.text:"")}</div>}</>}</div>}
+ {mode!=="off"&&<div className="min-h-14 rounded bg-black p-2 text-center text-white">{active>=0&&<>{mode!=="translated"&&<div style={{fontSize:originalFontSize}}>{cues[active]?.text}</div>}{mode!=="original"&&<div style={{fontSize:translated[active]?translatedFontSize:originalFontSize}}>{translated[active]??(mode==="translated"?cues[active]?.text:"")}</div>}</>}</div>}
  <details><summary className="text-sm">字幕译文编辑 · {Object.keys(translated).length}/{cues.length}</summary><div className="max-h-64 space-y-2 overflow-auto">{cues.map((c,i)=><label key={i} className="block text-xs">{c.text}<Textarea value={translated[i]??""} disabled={busy} onChange={e=>{writeCache(cacheId("cues",c.text),e.target.value);mergeTranslated({[i]:e.target.value});}}/></label>)}</div></details>
  <details><summary className="text-sm">弹幕译文 · {Object.keys(commentTranslations).length}/{comments.length}</summary><div className="max-h-64 overflow-auto">{comments.filter(c=>commentTranslations[c.id]).map(c=><p key={c.id} className="border-b py-1 text-sm">{c.text} → {commentTranslations[c.id]}</p>)}</div></details>
  </details>;
