@@ -14,6 +14,7 @@ import { ModelPicker } from "@/components/theater/ModelPicker";
 import { useSubtitleDisplay } from "@/lib/subtitle-display";
 import { transcribeVideoWithAudioChunks } from "@/lib/ai/video-transcribe";
 import { transcribeLocalVideo } from "@/lib/ai/local-transcribe";
+import { HybridRepairPanel } from "@/components/theater/HybridRepairPanel";
 import { loadTranslationPrefs, saveTranslationPrefs, getRememberedTranslationKey, saveTranslationKey, loadTranscriptionPrefs, saveTranscriptionPrefs, getRememberedTranscriptionKey, saveTranscriptionKey } from "@/lib/translation-preferences";
 type Translated = { index:number; text:string };
 function stamp(n:number){const ms=Math.max(0,Math.round(n*1000));return [Math.floor(ms/3600000),Math.floor(ms/60000)%60,Math.floor(ms/1000)%60].map(x=>String(x).padStart(2,"0")).join(":")+","+String(ms%1000).padStart(3,"0");}
@@ -302,6 +303,7 @@ export function TranslationPanel(){
      {source.kind!=="file" && <p role="status" className="text-xs text-amber-500">⚠️ 按钮不可点击：请先关闭设置，在播放器上方选择「打开本地视频」并等待视频加载成功。在线视频链接不支持直接提取音轨。</p>}
      <p className="text-xs text-muted-foreground">整段转录时，大视频会在手机本地提取压缩音频，再分段传给转录 API；已完成片段保存在本机，取消或失败后重新打开同一视频、选相同服务继续即可跳过已完成分段。无需下载 Whisper 本地模型。</p>
    </div>
+   <HybridRepairPanel />
    <details className="rounded border border-border bg-background/60 p-2 text-xs space-y-2">
      <summary className="cursor-pointer font-semibold">其他方法：本机模型识别（需额外下载大文件）</summary>
      <div className="space-y-2 pt-2">
