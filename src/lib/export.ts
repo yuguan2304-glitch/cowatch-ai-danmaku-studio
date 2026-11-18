@@ -121,7 +121,7 @@ export function downloadText(filename: string, content: string, mime: string) {
   // exposes a narrow origin-scoped message channel to save local exports.
   // Browser users continue to use the normal blob download path.
   const nativeExport = (window as Window & { CoWatchExport?: { postMessage: (data: string) => void } }).CoWatchExport;
-  const allowed = ["cowatch.json","cowatch.xml","cowatch-worldbook.txt","cowatch-imported-worldbook.json","cowatch-sync.json"].includes(filename)
+  const allowed = ["cowatch.json","cowatch.xml","cowatch-worldbook.txt","cowatch-imported-worldbook.json","cowatch-sync.json","cowatch-subtitles.srt"].includes(filename)
     || (filename.endsWith("-共映术语.json") && filename.length <= 110 && !/[\\/:*?"<>|\r\n]/.test(filename) && mime === "application/json");
   if (nativeExport && allowed) {
     nativeExport.postMessage(JSON.stringify({ filename, mime, content }));
