@@ -16,6 +16,7 @@ import android.provider.MediaStore;
 import androidx.webkit.WebMessageCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
+import androidx.webkit.WebViewAssetLoader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
@@ -44,12 +45,16 @@ import android.view.Gravity;
 import android.widget.Toast;
 
 public final class MainActivity extends Activity {
-    private static final String HOME_URL = "https://cowatch-ai-danmaku-studio.yuguan2304.workers.dev/";
-    private static final String TRUSTED_HOST = "cowatch-ai-danmaku-studio.yuguan2304.workers.dev";
+    private static final String ONLINE_URL = "https://cowatch-ai-danmaku-studio.yuguan2304.workers.dev/";
+    private static final String LOCAL_URL = "https://appassets.androidplatform.net/index.html";
+    private static final String HOME_URL = BuildConfig.OFFLINE_BUNDLE ? LOCAL_URL : ONLINE_URL;
+    private static final String TRUSTED_HOST = BuildConfig.OFFLINE_BUNDLE
+        ? "appassets.androidplatform.net" : "cowatch-ai-danmaku-studio.yuguan2304.workers.dev";
     private static final int PICK_FILE = 501;
     private static final int MAX_EXPORT_CHARS = 6 * 1024 * 1024;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WebView webView;
+    private WebViewAssetLoader localAssetLoader;
     private FrameLayout root;
     private LinearLayout connectionErrorView;
     private long loadSequence = 0;
@@ -85,6 +90,12 @@ public final class MainActivity extends Activity {
 
         root = new FrameLayout(this);
         root.setBackgroundColor(0xff141110);
+        if (BuildConfig.OFFLINE_BUNDLE) {
+            localAssetLoader = new WebViewAssetLoader.Builder()
+                .setDomain(TRUSTED_HOST)
+                .addPathHandler("/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .build();
+        }
         webView = new WebView(this);
         root.addView(webView, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
@@ -102,6 +113,13 @@ public final class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
         webView.setWebViewClient(new WebViewClient() {
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (localAssetLoader != null && "https".equals(request.getUrl().getScheme())
+                    && TRUSTED_HOST.equals(request.getUrl().getHost())) {
+                    return localAssetLoader.shouldInterceptRequest(request.getUrl());
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
                 if (!url.startsWith("https://" + TRUSTED_HOST + "/")) return;
@@ -112,7 +130,9 @@ public final class MainActivity extends Activity {
                     if (webView != null && loadSequence == attempt && !mainPageFailed) {
                         webView.evaluateJavascript("(function(){var el=document.getElementById('root');return !!(el && el.children.length && el.innerText.trim().length)})()", value -> {
                             if (webView != null && loadSequence == attempt && !"true".equals(value)) {
-                                showConnectionError("页面加载超时。当前网络可能无法访问共映的 Cloudflare 域名。");
+                                showConnectionError(BuildConfig.OFFLINE_BUNDLE
+                                    ? "本地页面加载超时。请点击重新打开。"
+                                    : "页面加载超时。当前网络可能无法访问共映的 Cloudflare 域名。");
                             }
                         });
                     }
@@ -136,7 +156,9 @@ public final class MainActivity extends Activity {
                 super.onReceivedError(view, request, error);
                 if (request.isForMainFrame()) {
                     mainPageFailed = true;
-                    showConnectionError("无法连接共映网站（网络错误 " + error.getErrorCode() + "）。可能是当前网络无法访问 workers.dev。");
+                    showConnectionError(BuildConfig.OFFLINE_BUNDLE
+                        ? "离线页面载入失败（错误 " + error.getErrorCode() + "）。"
+                        : "无法连接共映网站（网络错误 " + error.getErrorCode() + "）。可能是当前网络无法访问 workers.dev。");
                 }
             }
             @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
@@ -149,7 +171,13 @@ public final class MainActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return false;
                 Uri url = request.getUrl();
-                if ("https".equals(url.getScheme()) && TRUSTED_HOST.equals(url.getHost())) return false;
+                if ("https".equals(url.getScheme()) && TRUSTED_HOST.equals(url.getHost())) {
+                    if (BuildConfig.OFFLINE_BUNDLE && "/".equals(url.getPath())) {
+                        view.loadUrl(LOCAL_URL);
+                        return true;
+                    }
+                    return false;
+                }
                 try { startActivity(new Intent(Intent.ACTION_VIEW, url)); }
                 catch (Exception ignored) { Toast.makeText(MainActivity.this, "无法打开外部链接", Toast.LENGTH_SHORT).show(); }
                 return true;
@@ -272,7 +300,9 @@ public final class MainActivity extends Activity {
         });
         connectionErrorView.addView(browser, new LinearLayout.LayoutParams(-2, -2));
         TextView note = new TextView(this);
-        note.setText("这不是 API 密钥的问题。共映当前使用 Cloudflare 默认域名，在部分网络中可能无法连接。请勿卸载应用或清除数据，以免丢失本地收藏。");
+        note.setText(BuildConfig.OFFLINE_BUNDLE
+            ? "本地离线版无需连接 Cloudflare 即可打开界面；使用 AI 仍需要能访问你选择的 API 服务。旧版收藏不会自动迁移，请保留旧版 App。"
+            : "这不是 API 密钥的问题。共映当前使用 Cloudflare 默认域名，在部分网络中可能无法连接。请勿卸载应用或清除数据，以免丢失本地收藏。");
         note.setTextSize(12);
         note.setTextColor(0xffb8aaa0);
         note.setGravity(Gravity.CENTER);
