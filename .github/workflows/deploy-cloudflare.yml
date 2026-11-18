@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: bun install --no-save
       - name: Build website
+        env:
+          VITE_COWATCH_SUPABASE_URL: ${{ vars.COWATCH_SUPABASE_URL }}
+          VITE_COWATCH_SUPABASE_PUBLISHABLE_KEY: ${{ vars.COWATCH_SUPABASE_PUBLISHABLE_KEY }}
         run: bun run build
       - name: TypeScript check
         run: bunx tsc --noEmit
