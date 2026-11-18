@@ -194,6 +194,14 @@ public final class MainActivity extends Activity {
                         "sessionStorage.setItem('cowatch:sw-reset-once','yes');location.reload()}" +
                         "}).catch(function(){})})()", null);
                 }
+                if (BuildConfig.OFFLINE_BUNDLE) {
+                    final String currentSource=liveAssetsDecided
+                        ? (liveAssetsReady?"online":"offline") : "unknown";
+                    view.evaluateJavascript(
+                        "window.__cowatchAssetSource='" + currentSource + "';" +
+                        "window.dispatchEvent(new CustomEvent('cowatch:asset-source',{detail:'" + currentSource + "'}));",
+                        null);
+                }
                 final long attempt = loadSequence;
                 // Even an HTTP 200 may render blank if a JS bundle fails to load.
                 handler.postDelayed(() -> {
@@ -314,6 +322,11 @@ public final class MainActivity extends Activity {
                         || message.getType()!=WebMessageCompat.TYPE_STRING) return;
                     try {
                         JSONObject item=new JSONObject(message.getData());
+                        String action=item.optString("action","");
+                        if ("refresh-web".equals(action)) {
+                            handler.post(this::refreshWebAssets);
+                            return;
+                        }
                         String updateUrl=item.optString("url","");
                         if (!"download-update".equals(item.optString("action","")) ||
                             !updateUrl.matches("https://github[.]com/yuguan2304-glitch/cowatch-ai-danmaku-studio/releases/download/android-alpha-[0-9]+/cowatch-android-alpha-preview[.]apk")) return;
@@ -446,6 +459,51 @@ public final class MainActivity extends Activity {
             if(connection!=null)connection.disconnect();
             return null;
         }
+    }
+
+    /** Explicit online update check, without touching browser DOM storage or model caches. */
+    private void refreshWebAssets(){
+        if(webView==null)return;
+        Toast.makeText(this,"共映正在检查在线功能版本…",Toast.LENGTH_SHORT).show();
+        new Thread(()->{
+            boolean reachable=false;
+            HttpURLConnection connection=null;
+            try{
+                URL target=new URL(ONLINE_URL);
+                connection=(HttpURLConnection)target.openConnection();
+                connection.setConnectTimeout(6500);
+                connection.setReadTimeout(8000);
+                connection.setRequestMethod("GET");
+                int code=connection.getResponseCode();
+                String mime=connection.getContentType();
+                reachable=code==200 && mime!=null && mime.toLowerCase().contains("text/html");
+            }catch(Exception ignored){}
+            finally{if(connection!=null)connection.disconnect();}
+            final boolean online=reachable;
+            handler.post(()->{
+                if(webView==null)return;
+                if(!online){
+                    Toast.makeText(this,"在线功能服务器暂时不可达，保留当前版本（未清除任何数据）",Toast.LENGTH_LONG).show();
+                    return;
+                }
+                // Unregister ONLY the obsolete CoWatch shell worker/cache. This
+                // does not clear IndexedDB, translation data or Whisper model cache.
+                webView.evaluateJavascript(
+                    "(async()=>{try{" +
+                    "if('serviceWorker' in navigator){" +
+                    "let rs=await navigator.serviceWorker.getRegistrations();" +
+                    "await Promise.all(rs.map(r=>r.unregister()));}" +
+                    "if('caches' in window){let names=await caches.keys();" +
+                    "await Promise.all(names.filter(n=>n.startsWith('cowatch-shell-')).map(n=>caches.delete(n)));}" +
+                    "}catch(e){}return true})()",
+                    value->{
+                        if(webView==null)return;
+                        liveAssetsDecided=false;liveAssetsReady=false;
+                        webView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
+                        webView.loadUrl(LOCAL_URL+"?cowatch_refresh="+System.currentTimeMillis());
+                    });
+            });
+        }).start();
     }
 
     private void downloadAppUpdate(String url){
