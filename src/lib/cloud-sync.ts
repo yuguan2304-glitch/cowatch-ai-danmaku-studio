@@ -42,7 +42,7 @@ async function authToken(code:string):Promise<string>{
 }
 async function encryptionKey(code:string):Promise<CryptoKey>{
   const bytes=await derive(code,"cowatch-encryption-v1:");
-  return crypto.subtle.importKey("raw",bytes,"AES-GCM",false,["encrypt","decrypt"]);
+  return crypto.subtle.importKey("raw",new Uint8Array(bytes).buffer,"AES-GCM",false,["encrypt","decrypt"]);
 }
 async function encrypt(code:string,plain:string):Promise<string>{
   if(plain.length>MAX_BYTES)throw Error("当前元数据太大，超过云端安全同步上限");
