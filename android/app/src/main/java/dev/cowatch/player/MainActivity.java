@@ -178,6 +178,22 @@ public final class MainActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 if (mainPageFailed || !url.startsWith("https://" + TRUSTED_HOST + "/")) return;
+                if (BuildConfig.OFFLINE_BUNDLE) {
+                    // Older Alpha appassets service workers cached a bundled /
+                    // and could intercept the updated page before Android sees it.
+                    // Remove only CoWatch's shell cache, not IndexedDB/videos,
+                    // translation preferences, or the Whisper model cache.
+                    view.evaluateJavascript(
+                        "(function(){if(!('serviceWorker' in navigator))return;" +
+                        "navigator.serviceWorker.getRegistrations().then(async function(rs){" +
+                        "if(!rs.length)return;" +
+                        "await Promise.all(rs.map(function(r){return r.unregister()}));" +
+                        "if('caches' in window){var ks=await caches.keys();" +
+                        "await Promise.all(ks.filter(function(k){return k.indexOf('cowatch-shell-')===0}).map(function(k){return caches.delete(k)}))}" +
+                        "if(sessionStorage.getItem('cowatch:sw-reset-once')!=='yes'){" +
+                        "sessionStorage.setItem('cowatch:sw-reset-once','yes');location.reload()}" +
+                        "}).catch(function(){})})()", null);
+                }
                 final long attempt = loadSequence;
                 // Even an HTTP 200 may render blank if a JS bundle fails to load.
                 handler.postDelayed(() -> {
