@@ -13,9 +13,9 @@ android {
     }
 
     defaultConfig {
-        applicationId offlineBundle ? 'dev.cowatch.player.offline' : 'dev.cowatch.player'
+        applicationId offlineBundle ? 'dev.cowatch.player.offline.transfer' : 'dev.cowatch.player'
         buildConfigField 'boolean', 'OFFLINE_BUNDLE', offlineBundle ? 'true' : 'false'
-        resValue 'string', 'cowatch_app_name', offlineBundle ? '共映 离线版' : '共映 CoWatch'
+        resValue 'string', 'cowatch_app_name', offlineBundle ? '共映 迁移测试版' : '共映 CoWatch'
         minSdk 26
         targetSdk 34
         versionCode Integer.parseInt(System.getenv('COWATCH_VERSION_CODE') ?: '1')
