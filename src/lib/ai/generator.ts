@@ -12,12 +12,14 @@ import { openaiChat } from "./openai";
 import { geminiGenerate, fileToBase64 } from "./gemini";
 import { AiError, isAbort } from "./errors";
 import { db } from "../db";
+import { danmakuCheckpointKey, loadDanmakuCheckpoint, saveDanmakuChunk, removeDanmakuChunk, clearDanmakuCheckpoint } from "./danmaku-checkpoint";
 import type { Segment } from "../types";
 
 let controller: AbortController | null = null;
 let extractor: FrameExtractor | null = null;
 let videoCache: { file: File; base64: string } | null = null;
 let sceneSession = "";
+let activeCheckpointKey: string | null = null;
 const sceneMemory = new Map<number,string>();
 
 const sleep = (ms: number, signal?: AbortSignal) =>
@@ -237,9 +239,12 @@ async function runSegment(seg: Segment, signal: AbortSignal) {
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
   });
-  // Persist each completed paid segment. A user may close the page during a
-  // long video; saving only at the end risks losing hours of generated work.
-  // IndexedDB errors are non-fatal and do not trigger another paid AI request.
+  // Save the completed range separately. Reopening the same video restores the
+  // exact done status instead of billing the user for the same range again.
+  if (activeCheckpointKey) {
+    try { await saveDanmakuChunk(activeCheckpointKey, seg, items); }
+    catch { useApp.getState().pushLog("warn", "本段弹幕已生成，但本地断点保存失败。退出前请导出备份，检查浏览器存储空间。"); }
+  }
   await saveHistory().catch(() => undefined);
 }
 
@@ -276,6 +281,33 @@ export async function startGeneration(): Promise<void> {
   const warn = describeMaterial().warning;
   if (warn) st.pushLog("warn", warn);
   ensureSegments();
+  // Recover saved paid results before scheduling any new API requests.
+  // A checkpoint is valid only for the same video, model and generation settings.
+  const initialSession = useApp.getState().sessionId;
+  const initialSource = useApp.getState().source;
+  const checkpointKey = await danmakuCheckpointKey(initialSource, useApp.getState().duration, useApp.getState().settings).catch(() => null);
+  if (useApp.getState().sessionId !== initialSession || useApp.getState().source !== initialSource) return;
+  activeCheckpointKey = checkpointKey;
+  if (checkpointKey) {
+    try {
+      const saved = await loadDanmakuCheckpoint(checkpointKey);
+      if (saved?.completed.length) {
+        const state = useApp.getState();
+        const matched = saved.completed.filter(c => state.segments.some(s =>
+          Math.abs(s.start - c.start) < 0.01 && Math.abs(s.end - c.end) < 0.01));
+        const restored = matched.flatMap(c => c.items);
+        // Keep unrelated manually edited content, replacing only ranges with paid saved results.
+        const isCovered = (t: number) => matched.some(c => t >= c.start && t < c.end);
+        state.setDanmaku([...state.danmaku.filter(d => d.demo || !isCovered(d.time)), ...restored], false);
+        for (const c of matched) {
+          const seg = useApp.getState().segments.find(s => Math.abs(s.start - c.start) < 0.01 && Math.abs(s.end - c.end) < 0.01);
+          if (seg) useApp.getState().updateSegment(seg.index, { status: "done", count: c.items.length, error: undefined });
+        }
+        state.pushLog("info", "已从本机恢复 " + matched.length + " 个完成片段（" + restored.length + " 条弹幕），不会重复请求这些片段。");
+      }
+    } catch { useApp.getState().pushLog("warn", "无法读取本机续传记录。请先备份历史弹幕，以免重复生成。"); return; }
+  }
+  if (useApp.getState().sessionId !== initialSession || useApp.getState().source !== initialSource) return;
   controller = new AbortController();
   const signal = controller.signal;
   st.setGenerating(true);
@@ -332,6 +364,7 @@ export async function startGeneration(): Promise<void> {
     s.segments.filter((x) => x.status === "running").forEach((x) => s.updateSegment(x.index, { status: "cancelled" }));
     s.setGenerating(false);
     controller = null;
+    activeCheckpointKey = null;
     extractor?.dispose();
     extractor = null;
     s.pushLog("info", signal.aborted ? "生成已停止。" : "生成完成。");
@@ -354,6 +387,9 @@ export async function regenerateSegment(index: number) {
   const st = useApp.getState();
   const seg = st.segments.find((s) => s.index === index);
   if (!seg) return;
+  // An intentional re-generation must invalidate the old paid result.
+  const key = await danmakuCheckpointKey(st.source, st.duration, st.settings);
+  await removeDanmakuChunk(key, seg);
   st.updateSegment(index, { status: "pending", attempts: 0, error: undefined, count: 0 });
   if (!st.generating) await startGeneration().catch(() => undefined);
 }
@@ -361,6 +397,9 @@ export async function regenerateSegment(index: number) {
 export async function restartAll() {
   const st = useApp.getState();
   if (st.generating) return;
+  // "全部重来" explicitly drops the prior checkpoint for this configuration.
+  const key = await danmakuCheckpointKey(st.source, st.duration, st.settings);
+  await clearDanmakuCheckpoint(key);
   st.setDanmaku([], false);
   st.setSegments([]);
   st.newSession();
