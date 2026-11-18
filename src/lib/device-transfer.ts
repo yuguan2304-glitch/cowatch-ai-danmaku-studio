@@ -82,9 +82,11 @@ function validate(input: unknown): DeviceTransfer {
   return value as DeviceTransfer;
 }
 
-export async function importDeviceTransfer(file: File): Promise<{history: number; presets: number; screenings: number; missingVideos: number}> {
-  if (file.size > MAX_IMPORT_BYTES) throw new Error("迁移包超过 15MB；请检查是否使用了正确的 JSON 文件");
-  const incoming = validate(JSON.parse(await file.text()) as unknown);
+export async function importDeviceTransfer(file: File | string): Promise<{history: number; presets: number; screenings: number; missingVideos: number}> {
+  if (typeof file !== "string" && file.size > MAX_IMPORT_BYTES) throw new Error("迁移包超过 15MB；请检查是否使用了正确的 JSON 文件");
+  const raw = typeof file === "string" ? file : await file.text();
+  if (raw.length > MAX_IMPORT_BYTES) throw new Error("迁移包内容超过 15MB");
+  const incoming = validate(JSON.parse(raw) as unknown);
   // Merge records without deleting local data. On ID collision retain the
   // newer record, and always preserve an existing local video File object.
   const [oldHistory, oldPresets, oldScreenings] = await Promise.all([
