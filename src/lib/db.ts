@@ -59,6 +59,14 @@ export const db = {
   putPreset: (p: ViewerPreset) => tx("presets", "readwrite", (s) => s.put(p)),
   deletePreset: (id: string) => tx("presets", "readwrite", (s) => s.delete(id)),
 
+  // Local-only resumable transcription checkpoints. Never cloud-sync raw audio.
+  getLocalValue: async <T>(key:string):Promise<T|undefined> => {
+    const row=await tx<{key:string;value:T}|undefined>("kv","readonly",store=>store.get(key));
+    return row?.value;
+  },
+  putLocalValue: <T>(key:string,value:T) => tx("kv","readwrite",store=>store.put({key,value})),
+  deleteLocalValue: (key:string) => tx("kv","readwrite",store=>store.delete(key)),
+
   /** Settings never include API keys — those stay in memory only. */
   loadSettings: async () => {
     const row = await tx<{ key: string; value: Settings } | undefined>("kv", "readonly", (s) => s.get("settings"));
