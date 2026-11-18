@@ -374,7 +374,8 @@ public final class MainActivity extends Activity {
               encodedPath.startsWith("/assets/") ||
               encodedPath.equals("/favicon.ico") ||
               encodedPath.equals("/manifest.webmanifest") ||
-              encodedPath.equals("/robots.txt"))) return null;
+              encodedPath.equals("/robots.txt") ||
+              encodedPath.equals("/cowatch-native-policy.json"))) return null;
         HttpURLConnection connection=null;
         try {
             URL remote=new URL(ONLINE_URL.replaceAll("/+$","")+encodedPath);
