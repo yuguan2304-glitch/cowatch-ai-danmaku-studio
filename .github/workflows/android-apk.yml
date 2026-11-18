@@ -4,6 +4,12 @@ on:
   pull_request:
     paths:
       - 'android/**'
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'bun.lock'
+      - 'vite.config.ts'
       - '.github/workflows/android-apk.yml'
   push:
     branches: [main]
@@ -34,15 +40,29 @@ jobs:
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
-      - name: Build Android test APK
+      - uses: oven-sh/setup-bun@v2
+      - name: Build offline CoWatch web interface
+        run: |
+          bun install --no-save
+          bun run build
+          mkdir -p android/app/src/main/assets
+          cp -a dist/. android/app/src/main/assets/
+          test -f android/app/src/main/assets/index.html
+      - name: Build original online Android APK
         run: gradle -p android :app:assembleDebug --no-daemon --stacktrace
-      - name: Prepare test installer
+      - name: Preserve original installer
         run: cp android/app/build/outputs/apk/debug/app-debug.apk cowatch-android-alpha.apk
-      - name: Upload installable APK
+      - name: Build separate offline-launch Android APK
+        run: gradle -p android :app:assembleDebug -PcowatchOffline=true --no-daemon --stacktrace
+      - name: Preserve offline installer
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk cowatch-android-offline-alpha.apk
+      - name: Upload both APKs
         uses: actions/upload-artifact@v4
         with:
           name: CoWatch-Android-APK
-          path: cowatch-android-alpha.apk
+          path: |
+            cowatch-android-alpha.apk
+            cowatch-android-offline-alpha.apk
           retention-days: 30
       - name: Publish prerelease for easy download
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -51,7 +71,8 @@ jobs:
         run: |
           gh release create "android-alpha-${{ github.run_number }}" \
             cowatch-android-alpha.apk \
+            cowatch-android-offline-alpha.apk \
             --title "共映 Android 测试版 #${{ github.run_number }}" \
-            --notes "共映安卓测试版。视频、AI 弹幕和评论仍由线上共映网页提供，需联网。横屏观影时由原生 App 接管系统状态栏和导航栏。此为 GitHub Actions 临时调试签名 APK，后续更新可能需要卸载旧版。" \
+            --notes "包含原始在线 APK 和单独安装的离线启动 APK（文件名含 offline）；后者内置本次网页界面，不需访问 workers.dev 即可启动，但 AI API 仍需网络。两个版本数据互不自动同步；请勿卸载旧版以免丢失收藏。调试签名仅供测试。" \
             --prerelease \
             --target "${{ github.sha }}"
