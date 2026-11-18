@@ -63,8 +63,8 @@ async function decrypt(code:string,packed:string):Promise<string>{
     return new TextDecoder().decode(raw);
   }catch{throw Error("无法解密云端数据：配对码不匹配，或同步数据损坏。没有覆盖本机记录。");}
 }
-async function request(code:string,method:"GET"|"PUT",body?:unknown):Promise<{version:number;ciphertext?:string|null}>{
-  const response=await fetch(API,{
+async function request(code:string,method:"GET"|"PUT",body?:unknown,knownVersion?:number):Promise<{version:number;ciphertext?:string|null;unchanged?:boolean}>{
+  const response=await fetch(API+(method==="GET"&&knownVersion?("?knownVersion="+knownVersion):""),{
     method,headers:{"Authorization":"Bearer "+await authToken(code),
       ...(body?{"Content-Type":"application/json"}:{})},
     ...(body?{body:JSON.stringify(body)}:{}),
@@ -83,11 +83,16 @@ export async function syncNow(code:string):Promise<{pulled:boolean;pushed:boolea
   if(busy)return {pulled:false,pushed:false,version:0};
   decode(code);busy=true;
   try{
+    const lastKey="cowatch:sync:last:"+code.slice(0,8);
+    const versionKey="cowatch:sync:version:"+code.slice(0,8);
     for(let attempt=0;attempt<3;attempt++){
-      const remote=await request(code,"GET");
       const before=(await exportDeviceTransfer()).text;
       const beforeNorm=normalized(before);
-      const last=localStorage.getItem("cowatch:sync:last:"+code.slice(0,8));
+      const last=localStorage.getItem(lastKey);
+      const knownVersion=Number(localStorage.getItem(versionKey)||0);
+      const remote=await request(code,"GET",undefined,knownVersion);
+      if(remote.unchanged && last===beforeNorm)
+        return {pulled:false,pushed:false,version:remote.version};
       const locallyEdited=last!==null&&last!==beforeNorm;
       const savedSettings=locallyEdited?useApp.getState().settings:null;
       let pulled=false;
@@ -104,13 +109,15 @@ export async function syncNow(code:string):Promise<{pulled:boolean;pushed:boolea
       let remoteNorm="";
       if(remote.ciphertext)remoteNorm=normalized(await decrypt(code,remote.ciphertext));
       if(remote.ciphertext&&mergedNorm===remoteNorm){
-        localStorage.setItem("cowatch:sync:last:"+code.slice(0,8),mergedNorm);
+        localStorage.setItem(lastKey,mergedNorm);
+        localStorage.setItem(versionKey,String(remote.version));
         return {pulled,pushed:false,version:remote.version};
       }
       try{
         const ciphertext=await encrypt(code,merged);
         const response=await request(code,"PUT",{expectedVersion:remote.version,ciphertext});
-        localStorage.setItem("cowatch:sync:last:"+code.slice(0,8),mergedNorm);
+        localStorage.setItem(lastKey,mergedNorm);
+        localStorage.setItem(versionKey,String(response.version));
         return {pulled,pushed:true,version:response.version};
       }catch(e){
         if(String(e).includes("HTTP 409")&&attempt<2)continue;
