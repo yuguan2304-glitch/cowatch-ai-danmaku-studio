@@ -4,9 +4,11 @@ interface D1Like {
   prepare(sql:string): {bind(...args:unknown[]):{first<T=unknown>():Promise<T|null>;run():Promise<{meta?:{changes?:number}}>}};
 }
 interface Env { SYNC_DB: D1Like; ASSETS:{fetch(request:Request):Promise<Response>}; }
-const MAX_PAYLOAD=2_000_000;
+// Keep each encrypted vault deliberately small: no video file belongs in D1.
+const MAX_PAYLOAD=800_000;
 const allowedOrigins = new Set([
   "https://appassets.androidplatform.net",
+  "cowatch://app",
   "https://cowatch-ai-danmaku-studio.yuguan2304.workers.dev",
 ]);
 function cors(req:Request):Headers {
