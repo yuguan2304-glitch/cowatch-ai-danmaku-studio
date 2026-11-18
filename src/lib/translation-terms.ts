@@ -3,6 +3,7 @@ export type TermEntry={id:string;source:string;target:string;note:string};
 export type TermGroup={id:string;name:string;entries:TermEntry[];updatedAt:number};
 const STORAGE="cowatch:term-groups:v1";
 const SELECTED="cowatch:term-group-selected:v1";
+const ENABLED="cowatch:term-group-enabled:v1";
 const newId=()=>crypto.randomUUID?.()??Math.random().toString(36).slice(2);
 function safeEntry(value:unknown):TermEntry|null{
  if(!value||typeof value!=="object")return null;
@@ -30,6 +31,16 @@ export function saveTermGroups(groups:TermGroup[]){
 }
 export function selectedTermGroupId(){try{return localStorage.getItem(SELECTED)||"";}catch{return "";}}
 export function saveSelectedTermGroupId(id:string){try{localStorage.setItem(SELECTED,id);}catch{}}
+/** Editing a group never switches which terminology is in use for translation. */
+export function enabledTermGroupId(){
+ try{
+  const raw=localStorage.getItem(ENABLED);
+  // Older versions used the selected group as the enabled group.
+  return raw===null ? selectedTermGroupId() : raw;
+ }catch{return "";}
+}
+export function saveEnabledTermGroupId(id:string){try{localStorage.setItem(ENABLED,id);}catch{}}
+
 export function parseTermFile(name:string,text:string):TermEntry[]{
  if(text.length>1024*1024)throw new Error("术语文件不能超过 1 MB");
  let rows:unknown[]=[];
