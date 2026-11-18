@@ -1,98 +1,122 @@
 import { exportDeviceTransfer, importDeviceTransfer } from "./device-transfer";
 import { useApp } from "./store";
 
-const STORE = "cowatch:cloud-sync:v1";
-export type SyncConfig = { url: string; anonKey: string; email: string; accessToken: string; refreshToken: string; expiresAt: number; userId: string };
-export const emptySyncConfig: SyncConfig = {url:import.meta.env['VITE_COWATCH_SUPABASE_URL']||"",anonKey:import.meta.env['VITE_COWATCH_SUPABASE_PUBLISHABLE_KEY']||"",email:"",accessToken:"",refreshToken:"",expiresAt:0,userId:""};
-export function readSyncConfig(): SyncConfig {
-  try { return {...emptySyncConfig,...JSON.parse(localStorage.getItem(STORE)||"{}")}; }
-  catch { return {...emptySyncConfig}; }
+// This is a private 256-bit pairing secret, not a user-chosen password.
+// No Supabase project or third-party account is required.
+const STORAGE_KEY = "cowatch:pairing-code:v1";
+const API = "https://cowatch-ai-danmaku-studio.yuguan2304.workers.dev/api/sync/v1";
+const MAX_BYTES = 1_400_000;
+let busy=false;
+
+function encode(b:Uint8Array):string{
+  let value="";for(const byte of b)value+=String.fromCharCode(byte);
+  return btoa(value).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 }
-export function writeSyncConfig(config: SyncConfig): void { localStorage.setItem(STORE,JSON.stringify(config)); }
-function configured(c: SyncConfig): string {
-  let url: URL;
-  try { url = new URL(c.url); } catch {throw Error("请填写有效的 Supabase HTTPS 项目地址");}
-  if (url.protocol!=="https:" || !url.hostname.endsWith(".supabase.co") || url.pathname!=="/" || !c.anonKey.trim()) {
-    throw Error("请填写 Supabase 项目 HTTPS URL 和公开 anon/publishable key（不要使用 service_role 密钥）");
-  }
-  return url.origin;
+function decode(s:string):Uint8Array{
+  if(!/^[A-Za-z0-9_-]{43}$/.test(s))throw Error("同步码应为 43 位字符，请完整复制");
+  const raw=atob(s.replace(/-/g,"+").replace(/_/g,"/")+"=");
+  if(raw.length!==32)throw Error("同步码长度不正确");
+  return Uint8Array.from(raw,c=>c.charCodeAt(0));
 }
-async function request(c: SyncConfig,path: string, method: string, body?:unknown, auth?:string):Promise<any> {
-  const url=configured(c);
-  const response=await fetch(url+path,{
-    method,headers:{"apikey":c.anonKey,"Content-Type":"application/json",
-      ...(auth?{"Authorization":"Bearer "+auth}:{}),
-      ...(method==="POST"&&path.startsWith("/rest/")?{"Prefer":"resolution=merge-duplicates,return=minimal"}:{})},
-    ...(body===undefined?{}:{body:JSON.stringify(body)}),credentials:"omit",referrerPolicy:"no-referrer",
+export function generateSyncCode():string{
+  const bytes=new Uint8Array(32);crypto.getRandomValues(bytes);return encode(bytes);
+}
+export function readSyncCode():string{
+  try{return localStorage.getItem(STORAGE_KEY)||"";}catch{return "";}
+}
+export function saveSyncCode(code:string):void{
+  decode(code.trim());
+  localStorage.setItem(STORAGE_KEY,code.trim());
+}
+export function clearSyncCode():void{
+  localStorage.removeItem(STORAGE_KEY);
+}
+async function derive(code:string,purpose:string):Promise<Uint8Array>{
+  const seed=decode(code);
+  const input=new Uint8Array(seed.byteLength+purpose.length);
+  input.set(new TextEncoder().encode(purpose),0);input.set(seed,purpose.length);
+  return new Uint8Array(await crypto.subtle.digest("SHA-256",input));
+}
+async function authToken(code:string):Promise<string>{
+  return encode(await derive(code,"cowatch-auth-v1:"));
+}
+async function encryptionKey(code:string):Promise<CryptoKey>{
+  const bytes=await derive(code,"cowatch-encryption-v1:");
+  return crypto.subtle.importKey("raw",bytes,"AES-GCM",false,["encrypt","decrypt"]);
+}
+async function encrypt(code:string,plain:string):Promise<string>{
+  if(plain.length>MAX_BYTES)throw Error("当前元数据太大，超过云端安全同步上限");
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},
+    await encryptionKey(code),new TextEncoder().encode(plain)));
+  const out=new Uint8Array(iv.length+ciphertext.length);
+  out.set(iv);out.set(ciphertext,iv.length);
+  return encode(out);
+}
+async function decrypt(code:string,packed:string):Promise<string>{
+  try{
+    const clean=packed.replace(/-/g,"+").replace(/_/g,"/");
+    const data=Uint8Array.from(atob(clean+"=".repeat((4-clean.length%4)%4)),c=>c.charCodeAt(0));
+    if(data.length<29)throw Error("同步包太短");
+    const raw=await crypto.subtle.decrypt({name:"AES-GCM",iv:data.slice(0,12)},
+      await encryptionKey(code),data.slice(12));
+    return new TextDecoder().decode(raw);
+  }catch{throw Error("无法解密云端数据：配对码不匹配，或同步数据损坏。没有覆盖本机记录。");}
+}
+async function request(code:string,method:"GET"|"PUT",body?:unknown):Promise<{version:number;ciphertext?:string|null}>{
+  const response=await fetch(API,{
+    method,headers:{"Authorization":"Bearer "+await authToken(code),
+      ...(body?{"Content-Type":"application/json"}:{})},
+    ...(body?{body:JSON.stringify(body)}:{}),
+    cache:"no-store",credentials:"omit",referrerPolicy:"no-referrer",
   });
-  if(!response.ok) {
-    const message=(await response.text().catch(()=>"")).slice(0,180);
-    throw Error("云端返回 HTTP "+response.status+"："+message);
+  if(!response.ok){
+    const message=await response.json().catch(()=>({error:"网络或接口异常"})) as {error?:string};
+    throw Error("同步接口 HTTP "+response.status+"："+(message.error||"请检查网络和 D1 配置"));
   }
-  const t=await response.text();
-  return t?JSON.parse(t):null;
+  return response.json() as Promise<{version:number;ciphertext?:string|null}>;
 }
-export async function sendSyncCode(c:SyncConfig):Promise<void> {
-  await request(c,"/auth/v1/otp","POST",{email:c.email.trim(),create_user:true});
+function normalized(s:string):string{
+  const d=JSON.parse(s) as Record<string,unknown>;delete d["exportedAt"];return JSON.stringify(d);
 }
-export async function verifySyncCode(c:SyncConfig,code:string):Promise<SyncConfig> {
-  const data=await request(c,"/auth/v1/verify","POST",{email:c.email.trim(),token:code.trim(),type:"email"});
-  if (!data.access_token||!data.refresh_token||!data.user?.id)throw Error("验证码无效或已过期");
-  const next={...c,accessToken:String(data.access_token),refreshToken:String(data.refresh_token),
-    expiresAt:Date.now()+Number(data.expires_in||3600)*1000,userId:String(data.user.id)};
-  writeSyncConfig(next);return next;
-}
-async function fresh(c:SyncConfig):Promise<SyncConfig> {
-  if (!c.refreshToken || !c.userId)throw Error("请先登录同步账户");
-  if (Date.now()<c.expiresAt-120000) return c;
-  const data=await request(c,"/auth/v1/token?grant_type=refresh_token","POST",{refresh_token:c.refreshToken});
-  if(!data.access_token||!data.refresh_token)throw Error("登录已过期，请重新验证邮箱");
-  const next={...c,accessToken:String(data.access_token),refreshToken:String(data.refresh_token),
-    expiresAt:Date.now()+Number(data.expires_in||3600)*1000};
-  writeSyncConfig(next);return next;
-}
-type Snapshot = {user_id:string;data:unknown;updated_at:string};
-function normalized(s:string):string {
-  const data=JSON.parse(s) as Record<string,unknown>;
-  delete data["exportedAt"];
-  return JSON.stringify(data);
-}
-let syncing=false;
-export async function syncNow(config:SyncConfig):Promise<{pulled:boolean;pushed:boolean}> {
-  if(syncing)return {pulled:false,pushed:false};
-  syncing=true;
-  try {
-    const c=await fresh(config);
-    const remote=await request(c,"/rest/v1/cowatch_sync?select=user_id,data,updated_at&user_id=eq."+encodeURIComponent(c.userId),"GET",undefined,c.accessToken) as Snapshot[];
-    const initial=(await exportDeviceTransfer()).text;
-    const initialNormalized=normalized(initial);
-    const previousHash=localStorage.getItem("cowatch:cloud-last-synced:"+c.userId);
-    const localChanged=previousHash!==null && previousHash!==initialNormalized;
-    const localSettings=localChanged?useApp.getState().settings:null;
-    let pulled=false;
-    const record=remote?.[0];
-    if(record?.data) {
-      const raw=JSON.stringify(record.data);
-      // Merge remote history and screenings; keep any unsynced local settings.
-      if(normalized(raw)!==initialNormalized){
-        await importDeviceTransfer(raw);
-        pulled=true;
-        if(localSettings)useApp.getState().setSettings(localSettings);
+export async function syncNow(code:string):Promise<{pulled:boolean;pushed:boolean;version:number}>{
+  if(busy)return {pulled:false,pushed:false,version:0};
+  decode(code);busy=true;
+  try{
+    for(let attempt=0;attempt<3;attempt++){
+      const remote=await request(code,"GET");
+      const before=(await exportDeviceTransfer()).text;
+      const beforeNorm=normalized(before);
+      const last=localStorage.getItem("cowatch:sync:last:"+code.slice(0,8));
+      const locallyEdited=last!==null&&last!==beforeNorm;
+      const savedSettings=locallyEdited?useApp.getState().settings:null;
+      let pulled=false;
+      if(remote.ciphertext){
+        const raw=await decrypt(code,remote.ciphertext);
+        if(normalized(raw)!==beforeNorm){
+          await importDeviceTransfer(raw);
+          pulled=true;
+          if(savedSettings)useApp.getState().setSettings(savedSettings);
+        }
+      }
+      const merged=(await exportDeviceTransfer()).text;
+      const mergedNorm=normalized(merged);
+      let remoteNorm="";
+      if(remote.ciphertext)remoteNorm=normalized(await decrypt(code,remote.ciphertext));
+      if(remote.ciphertext&&mergedNorm===remoteNorm){
+        localStorage.setItem("cowatch:sync:last:"+code.slice(0,8),mergedNorm);
+        return {pulled,pushed:false,version:remote.version};
+      }
+      try{
+        const ciphertext=await encrypt(code,merged);
+        const response=await request(code,"PUT",{expectedVersion:remote.version,ciphertext});
+        localStorage.setItem("cowatch:sync:last:"+code.slice(0,8),mergedNorm);
+        return {pulled,pushed:true,version:response.version};
+      }catch(e){
+        if(String(e).includes("HTTP 409")&&attempt<2)continue;
+        throw e;
       }
     }
-    const merged=(await exportDeviceTransfer()).text;
-    // Keep remote in sync with merged local snapshot only if the content differs.
-    if(!record || normalized(merged)!==normalized(JSON.stringify(record.data))) {
-      await request(c,"/rest/v1/cowatch_sync?on_conflict=user_id","POST",
-        {user_id:c.userId,data:JSON.parse(merged)},c.accessToken);
-      localStorage.setItem("cowatch:cloud-last-synced:"+c.userId,normalized(merged));
-      return {pulled,pushed:true};
-    }
-    localStorage.setItem("cowatch:cloud-last-synced:"+c.userId,normalized(merged));
-    return {pulled,pushed:false};
-  }finally{syncing=false;}
-}
-export function clearSyncLogin():void {
-  const c=readSyncConfig();
-  writeSyncConfig({...c,accessToken:"",refreshToken:"",expiresAt:0,userId:""});
+    throw Error("同步冲突，请稍后重试");
+  }finally{busy=false;}
 }
