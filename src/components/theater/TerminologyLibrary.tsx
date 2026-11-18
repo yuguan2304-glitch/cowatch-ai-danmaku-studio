@@ -11,6 +11,8 @@ export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
  const [newCategory,setNewCategory]=useState("");
  const [source,setSource]=useState(""),[target,setTarget]=useState(""),[note,setNote]=useState("");
  const [importMode,setImportMode]=useState<"merge"|"replace">("merge");
+ const [pasted,setPasted]=useState("");
+ const [pasteOpen,setPasteOpen]=useState(false);
  const fileRef=useRef<HTMLInputElement>(null);
  const current=groups.find(g=>g.id===active);
  const termText=(group:TermGroup|undefined)=>group?.entries.map(e=>e.source+" = "+e.target+(e.note?"（"+e.note+"）":"")).join("\\n")??"";
@@ -43,15 +45,25 @@ export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
   updateGroup([...current.entries,newTerm(source.trim(),target.trim(),note.trim())]);
   setSource("");setTarget("");setNote("");
  };
- const readFile=async(file:File|undefined)=>{
-  if(!file||!current)return;
-  try{
-   const imported=parseTermFile(file.name,await file.text());
-   if(importMode==="replace"&&!confirm("用文件中的 "+imported.length+" 条术语替换当前「"+current.name+"」分类？其他分类不受影响。"))return;
+ const applyEntries=(imported:TermGroup["entries"])=>{
+   if(!current)return;
+   if(importMode==="replace"&&!confirm("用这 "+imported.length+" 条术语替换当前「"+current.name+"」分类？其他分类不受影响。"))return;
    const entries=importMode==="replace"?imported:uniqueTerms([...imported,...current.entries]);
    updateGroup(entries);
-   toast.success("已导入 "+imported.length+" 条；当前分类合计 "+entries.length+" 条（仅保存到本机）");
-  }catch(e){toast.error("术语导入失败："+(e as Error).message);}
+   toast.success("已导入 "+imported.length+" 条；当前分类共 "+entries.length+" 条");
+ };
+ const readFile=async(file:File|undefined)=>{
+  if(!file||!current)return;
+  try{applyEntries(parseTermFile(file.name,await file.text()));}
+  catch(e){toast.error("术语导入失败："+(e as Error).message);}
+ };
+ const readPasted=()=>{
+  if(!pasted.trim()){toast.error("请先粘贴术语内容");return;}
+  try{
+    const content=pasted.trim();
+    const parsed=parseTermFile(content.startsWith("[")||content.startsWith("{")?"粘贴术语.json":"粘贴术语.txt",content);
+    applyEntries(parsed);setPasted("");
+  }catch(e){toast.error("粘贴导入失败："+(e as Error).message);}
  };
  const exportGroup=()=>{
   if(!current)return;
@@ -92,8 +104,13 @@ export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
       <select className="rounded border bg-background p-2 text-xs" value={importMode} onChange={e=>setImportMode(e.target.value as typeof importMode)}>
        <option value="merge">合并并去重</option><option value="replace">替换当前分类</option>
       </select>
-      <input ref={fileRef} type="file" className="hidden" accept=".json,.txt,.md,.markdown,.csv,.tsv" onChange={e=>{const file=e.target.files?.[0];e.target.value="";void readFile(file);}}/>
-      <Button type="button" size="sm" variant="outline" onClick={()=>fileRef.current?.click()}>选择文件导入</Button>
+      <input ref={fileRef} type="file" className="block w-full min-w-0 max-w-full text-xs file:mr-2 file:rounded file:border file:border-border file:bg-secondary file:px-2 file:py-2" accept=".json,.txt,.md,.markdown,.csv,.tsv,application/json,text/plain" aria-label="从手机文件管理器选择术语文件" onChange={e=>{const file=e.target.files?.[0];e.target.value="";void readFile(file);}}/>
+     </div>
+     <p className="text-xs text-muted-foreground">直接点击上方的「选择文件」打开手机文件管理器。如安卓 WebView 无法弹出文件选择器，可使用下方「粘贴导入」。</p>
+     <Button type="button" size="sm" variant="outline" onClick={()=>setPasteOpen(x=>!x)}>{pasteOpen?"收起粘贴导入":"粘贴导入（无需文件选择器）"}</Button>
+     {pasteOpen&&<div className="space-y-2">
+       <textarea className="w-full min-h-36 rounded border border-border bg-background p-2 text-xs" value={pasted} onChange={e=>setPasted(e.target.value)} placeholder={"直接粘贴术语书 JSON 全文，或一行一条：\\nDream = Dream\\nSapnap = Sapnap\\nMinecraft Manhunt = Minecraft 猎人游戏"}/>
+       <Button type="button" size="sm" onClick={readPasted}>导入粘贴的术语</Button>
      </div>
     </div>
     <div className="max-h-72 space-y-2 overflow-y-auto">
