@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookmarkPlus, Clapperboard, Heart, Play, Trash2, RefreshCw, Download, Upload } from "lucide-react";
-import { exportScreeningPackage, importScreeningPackage } from "@/lib/screening-package";
+import { exportScreeningPackage, importScreeningPackage, shareSavedVideo } from "@/lib/screening-package";
 import { exportDeviceTransfer, importDeviceTransfer } from "@/lib/device-transfer";
 import { downloadText } from "@/lib/export";
 import { toast } from "sonner";
@@ -212,7 +212,14 @@ export function SavedTheater() {
         </div>
       </button>
       {!compact && <div className="flex flex-wrap justify-end gap-1 border-t border-border px-2 py-1">
-        {item.sourceKind === "file" && !item.file && <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs">补充本地视频 <input type="file" accept="video/*,.mkv,.mov,.m4v,.ogv" className="sr-only" disabled={busy||generating} onChange={e=>{const f=e.target.files?.[0];if(f)void attachVideo(item,f);e.target.value="";}}/></label>}\n        {item.sourceKind === "file" && item.file && <Button size="sm" variant="outline" onClick={() => { try { exportScreeningPackage(item); toast.success("已开始导出完整放映包"); } catch (error) { toast.error((error as Error).message); } }}><Download className="size-3.5"/> 导出放映包</Button>}
+        {item.sourceKind === "file" && !item.file && <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs">补充本地视频 <input type="file" accept="video/*,.mkv,.mov,.m4v,.ogv" className="sr-only" disabled={busy||generating} onChange={e=>{const f=e.target.files?.[0];if(f)void attachVideo(item,f);e.target.value="";}}/></label>}\n        {item.sourceKind === "file" && item.file && <>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => {
+            void shareSavedVideo(item).then(()=>toast.success("已调用安卓分享，记得在接收位置确认视频文件完整保存。")).catch(error=>{
+              if((error as Error).name!=="AbortError") toast.error((error as Error).message,{duration:9000});
+            });
+          }}><Upload className="size-3.5"/> 手机分享原视频</Button>
+          <Button size="sm" variant="outline" onClick={() => { try { exportScreeningPackage(item); toast.message("已发起 .cowatch 放映包下载。只有在文件管理中看到文件且大小正常，才算真正导出成功。",{duration:9000}); } catch (error) { toast.error((error as Error).message); } }}><Download className="size-3.5"/> 导出放映包</Button>
+        </>}
         <Button size="sm" variant="ghost" onClick={() => void remove(item)}><Trash2 className="size-3.5"/> 删除收藏</Button>
       </div>}
     </div>
@@ -244,7 +251,7 @@ export function SavedTheater() {
         <Button size="sm" variant="ghost" onClick={() => void reload()}><RefreshCw className="size-4"/> 刷新收藏</Button>
       </details>
     </>}
-    <p className="text-xs text-muted-foreground">旧版数据第一次搬家：老版共映里逐部点「导出放映包（.cowatch）」，新 Alpha 在此点「导入放映包」；网页或较新版还可用 JSON 设备迁移包。两个 App 的私有数据不能直接互读，请勿卸载有收藏的旧版。之后连接云端账号，新的收藏和弹幕记录可自动同步（不传视频原文件）。</p>
+    <p className="text-xs text-muted-foreground">旧版安卓可能无法保存 .cowatch 下载。请先在设置中用配对码将弹幕与收藏记录同步到新 Alpha；如原视频只在旧版，展开收藏卡片尝试「手机分享原视频」，在系统分享页保存到文件管理或传到 PC。看到视频在外部文件夹可播放后，再到新 Alpha 的收藏里点「补充本地视频」进行关联。切勿提前卸载旧版或清理其应用数据。</p>
     {storageEstimate && <p className="text-xs text-muted-foreground">{storageEstimate}</p>}\n    <p className="text-xs text-muted-foreground">支持导出和导入 .cowatch 完整放映包。断网启动需先联网打开新版共映至少一次，让离线网页资源完成缓存。仅本地文件可以完整离线播放；外链仍需网络。 </p>\n    <p className="text-xs text-muted-foreground">这些都是你自己保存的放映记录，推荐卡片只从本机收藏中轮换，不是其他人的真实投稿。本地视频会占用设备存储；切换浏览器、卸载 App 或清除网站数据可能导致收藏丢失。修改弹幕后记得点「更新这场放映」。</p>
   </section>;
 }
