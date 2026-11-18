@@ -40,7 +40,7 @@ export function parseTermFile(name:string,text:string):TermEntry[]{
    const data=parsed as Record<string,unknown>;
    if(Array.isArray(data["entries"]))rows=data["entries"];
    else if(Array.isArray(data["terms"]))rows=data["terms"];
-   else if(data["character_book"]&&typeof data["character_book"]==="object"&&Array.isArray((data["character_book"] as Record<string,unknown>).entries))rows=(data["character_book"] as {entries:unknown[]}).entries;
+   else if(data["character_book"]&&typeof data["character_book"]==="object"&&Array.isArray((data["character_book"] as Record<string,unknown>)["entries"]))rows=(data["character_book"] as {entries:unknown[]}).entries;
    else rows=Object.entries(data).map(([source,target])=>({source,target}));
   }
  }else if(/\.(txt|md|markdown|csv|tsv)$/i.test(name)){
