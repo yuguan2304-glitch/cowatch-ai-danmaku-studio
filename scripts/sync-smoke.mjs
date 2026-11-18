@@ -29,7 +29,7 @@ assert.equal(read.data.version,1);
 const conflict=await call("PUT",{expectedVersion:0,ciphertext:randomBytes(40).toString("base64url")});
 assert.equal(conflict.status,409);
 const deleted=await call("DELETE",{expectedVersion:1});
-assert.equal(deleted.status,200);
+assert.equal(deleted.status,200,"DELETE returned "+JSON.stringify(deleted));
 const missing=await call("GET");
 assert.equal(missing.data.version,0);
 console.log("PASS: D1 sync API auth, encrypted payload storage, conflict handling, and cleanup");
