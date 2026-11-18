@@ -59,7 +59,16 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       self.postMessage({kind: "ready"});
     }
     if (data.kind === "load") return;
-    const result = await recognizer(data.data, { return_timestamps: true, task: "transcribe" });
+    // Prevent common Whisper hallucinations on noisy game audio or silence.
+    // Local chunks are independent; disable inherited prompt context.
+    const result = await recognizer(data.data, {
+      return_timestamps: true,
+      task: "transcribe",
+      condition_on_prev_tokens: false,
+      no_speech_threshold: 0.55,
+      compression_ratio_threshold: 2.1,
+      logprob_threshold: -1.0,
+    });
     const raw = result as {text?: string; chunks?: {text: string; timestamp: [number, number | null]}[]};
     const cues = Array.isArray(raw.chunks)
       ? raw.chunks.filter(c => c.text?.trim()).map(c => ({
@@ -70,6 +79,18 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       : raw.text?.trim()
         ? [{ start: data.offset, end: data.offset + data.data.length / 16000, text: raw.text.trim() }]
         : [];
+    // Do not convert a repeatedly hallucinated sentence into dozens of subtitles.
+    const normalized = (text: string) => text.toLowerCase().replace(/[\\p{P}\\p{S}\\s]/gu, "");
+    const counts = new Map<string,number>();
+    for (const cue of cues) {
+      const key=normalized(cue.text);
+      if (key.length>=12) counts.set(key,(counts.get(key)??0)+1);
+    }
+    const mostRepeated=Math.max(0,...counts.values());
+    if (cues.length>=5 && mostRepeated>=4 && mostRepeated/cues.length>=0.65) {
+      self.postMessage({kind:"error",id:data.id,message:"本地 Whisper 连续生成同一句话，疑似语音幻觉。当前片段已拒绝保存，建议换 Groq 对照或尝试更大模型。"});
+      return;
+    }
     self.postMessage({kind: "result", id: data.id, cues});
   } catch (error) {
     self.postMessage({kind: "error", id: data.kind === "recognize" ? data.id : -1, message: (() => {
