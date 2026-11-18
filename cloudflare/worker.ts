@@ -141,31 +141,32 @@ async function transcribeAudio(req:Request,env:Env):Promise<Response>{
  */
 async function whisperModelAsset(req:Request,env:Env,path:string):Promise<Response>{
   if(req.method!=="GET")return json(req,{error:"只允许读取模型资源"},405);
-  const prefix="/api/model/v1/onnx-community/whisper-tiny/resolve/main/";
-  if(!path.startsWith(prefix))return json(req,{error:"模型资源不在允许列表"},404);
-  const filename=path.slice(prefix.length);
+  const matched=/^\/api\/model\/v1\/onnx-community\/whisper-(tiny|base)\/resolve\/main\/(.+)$/.exec(path);
+  if(!matched)return json(req,{error:"模型资源不在允许列表"},404);
+  const modelSize=matched[1];
+  const filename=matched[2];
   if(!/^(?:[a-zA-Z0-9._-]+|onnx\/[a-zA-Z0-9._-]+)$/.test(filename)
     || !/\.(?:json|onnx)$/.test(filename))return json(req,{error:"文件类型不支持"},404);
   const origin=req.headers.get("Origin")||"";
   if(origin && !allowedOrigins.has(origin))return json(req,{error:"当前来源不允许获取共映模型"},403);
-  const estimate=filename.endsWith(".onnx")?60_000_000:2_000_000;
+  const estimate=filename.endsWith(".onnx")?(modelSize==="base"?170_000_000:65_000_000):2_000_000;
   // Reserve conservatively before fetching; no dependency on external billing.
   try{
     await env.SYNC_DB.prepare("CREATE TABLE IF NOT EXISTS model_daily_budget (owner_hash TEXT NOT NULL, day TEXT NOT NULL, bytes INTEGER NOT NULL, PRIMARY KEY(owner_hash,day))").run();
     const day=new Date().toISOString().slice(0,10);
     const ip=(req.headers.get("CF-Connecting-IP")||"unknown").slice(0,100);
     const ipHash=await sha256("model-ip:"+ip);
-    const own=await env.SYNC_DB.prepare("INSERT INTO model_daily_budget(owner_hash,day,bytes) VALUES(?,?,?) ON CONFLICT(owner_hash,day) DO UPDATE SET bytes=bytes+excluded.bytes WHERE bytes+excluded.bytes<=260000000").bind(ipHash,day,estimate).run();
+    const own=await env.SYNC_DB.prepare("INSERT INTO model_daily_budget(owner_hash,day,bytes) VALUES(?,?,?) ON CONFLICT(owner_hash,day) DO UPDATE SET bytes=bytes+excluded.bytes WHERE bytes+excluded.bytes<=600000000").bind(ipHash,day,estimate).run();
     if(!(own.meta?.changes||0))return json(req,{error:"今日此设备模型下载保护额度已满，明天再试或选择其他下载来源"},429);
-    const all=await env.SYNC_DB.prepare("INSERT INTO model_daily_budget(owner_hash,day,bytes) VALUES('__global__',?,?) ON CONFLICT(owner_hash,day) DO UPDATE SET bytes=bytes+excluded.bytes WHERE bytes+excluded.bytes<=1000000000").bind(day,estimate).run();
+    const all=await env.SYNC_DB.prepare("INSERT INTO model_daily_budget(owner_hash,day,bytes) VALUES('__global__',?,?) ON CONFLICT(owner_hash,day) DO UPDATE SET bytes=bytes+excluded.bytes WHERE bytes+excluded.bytes<=3000000000").bind(day,estimate).run();
     if(!(all.meta?.changes||0))return json(req,{error:"共映模型下载保护额度已满，请明天再试"},429);
   }catch{return json(req,{error:"模型下载额度校验暂不可用"},503);}
-  const url="https://huggingface.co/onnx-community/whisper-tiny/resolve/main/"+filename;
+  const url="https://huggingface.co/onnx-community/whisper-"+modelSize+"/resolve/main/"+filename;
   try{
     const upstream=await fetch(url,{headers:{"User-Agent":"CoWatch-Model-Delivery/1.0"}});
     if(!upstream.ok||!upstream.body)return json(req,{error:"模型源站暂不可用（HTTP "+upstream.status+"），可切换下载来源"},502);
     const contentLength=Number(upstream.headers.get("Content-Length")||0);
-    if(contentLength>85_000_000)return json(req,{error:"模型文件超过共映当前的安全下载上限"},413);
+    if(contentLength>220_000_000)return json(req,{error:"模型文件超过共映当前的安全下载上限"},413);
     const headers=new Headers({
       "Content-Type":filename.endsWith(".json")?"application/json":"application/octet-stream",
       "Cache-Control":"public, max-age=86400",
