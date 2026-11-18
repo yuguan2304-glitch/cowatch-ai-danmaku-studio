@@ -12,6 +12,7 @@ import type { Cue } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { ModelPicker } from "@/components/theater/ModelPicker";
 import { useSubtitleDisplay } from "@/lib/subtitle-display";
+import { preserveTranslations, readTranslationSnapshot } from "@/lib/translation-snapshot";
 import { transcribeVideoWithAudioChunks, recoverSavedVideoTranscript } from "@/lib/ai/video-transcribe";
 import { transcribeLocalVideo } from "@/lib/ai/local-transcribe";
 import { HybridRepairPanel } from "@/components/theater/HybridRepairPanel";
@@ -163,7 +164,10 @@ export function TranslationPanel(){
  const previousConfigRef=useRef("");
  const currentConfig=JSON.stringify([session,target,service,translationUrl,translationModel,provider.baseUrl,provider.model,effectiveGlossary]);
  const readCache=(k:string)=>{try{return localStorage.getItem("cowatch:translation:"+k)??undefined;}catch{return undefined;}};
- const writeCache=(k:string,v:string)=>{try{localStorage.setItem("cowatch:translation:"+k,v);}catch{/* Storage may be unavailable or full. */}};
+ const writeCache=(k:string,v:string)=>{
+   try{localStorage.setItem("cowatch:translation:"+k,v);}
+   catch{ /* The IndexedDB snapshot independently preserves translated lines. */ }
+ };
  useEffect(()=>{previousTranslationsRef.current=translated;},[translated]);
  useEffect(()=>{
    const sameConfig=previousConfigRef.current===currentConfig;
@@ -195,6 +199,29 @@ export function TranslationPanel(){
    previousConfigRef.current=currentConfig;
    setCommentTranslations(Object.fromEntries(comments.flatMap(c=>{const v=readCache(cacheId("comments",c.text));return v===undefined?[]:[[c.id,v]];})));
  },[cues,comments,target,service,translationUrl,translationModel,provider.baseUrl,provider.model,effectiveGlossary,session]);
+ // Persist completed translations independent of the currently chosen AI model.
+ // IndexedDB writes are serialized and additive: an empty session cannot erase paid work.
+ useEffect(()=>{
+   if(source.kind!=="file"||!source.file||!cues.length)return;
+   const file=source.file;
+   void preserveTranslations(file,target,cues,translated).catch(()=>
+     toast.error("译文备份写入失败：请立即导出双语 SRT，检查手机存储空间")
+   );
+ },[source.file,cues,translated,target]);
+ // Rehydrate missing translations whenever an existing video is opened or cues are restored.
+ // Never request an API or replace translations that are already visible.
+ useEffect(()=>{
+   if(source.kind!=="file"||!source.file||!cues.length)return;
+   const file=source.file;
+   let cancelled=false;
+   void readTranslationSnapshot(file,target,cues).then(saved=>{
+     if(cancelled||useApp.getState().source.file!==file)return;
+     const current=useSubtitleDisplay.getState().translated;
+     const missing=Object.fromEntries(Object.entries(saved).filter(([i,value])=>value&&!current[Number(i)]?.trim()));
+     if(Object.keys(missing).length)useSubtitleDisplay.getState().mergeTranslated(missing);
+   }).catch(()=>undefined);
+   return ()=>{cancelled=true;};
+ },[source.file,cues,target]);
  const active=cues.findIndex(c=>c.start<=time&&c.end>time);
  const missingCount=cues.filter((_,i)=>!translated[i]?.trim()).length;
  const run=async(kind:"cues"|"comments",picked?:number[],maxMissing?:number)=>{
