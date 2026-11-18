@@ -111,7 +111,7 @@ export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
      {pasteOpen&&<div className="space-y-2">
        <textarea className="w-full min-h-36 rounded border border-border bg-background p-2 text-xs" value={pasted} onChange={e=>setPasted(e.target.value)} placeholder={"直接粘贴术语书 JSON 全文，或一行一条：\\nDream = Dream\\nSapnap = Sapnap\\nMinecraft Manhunt = Minecraft 猎人游戏"}/>
        <Button type="button" size="sm" onClick={readPasted}>导入粘贴的术语</Button>
-     </div>
+     </div>}
     </div>
     <div className="max-h-72 space-y-2 overflow-y-auto">
      {current.entries.map(entry=><div className="rounded border border-border p-2 space-y-1" key={entry.id}>
