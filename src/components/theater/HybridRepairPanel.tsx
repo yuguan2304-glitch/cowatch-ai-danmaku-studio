@@ -44,6 +44,7 @@ export function HybridRepairPanel(){
  const [viewHistory,setViewHistory]=useState(false);
  const ctrl=useRef<AbortController|null>(null);
  const [shown,setShown]=useState(false);
+ const details=useRef<HTMLDetailsElement|null>(null);
  const selectedSeconds=parseClock(end)-parseClock(start);
  const estimate=repairEstimate(Math.max(0,selectedSeconds));
  const sourceFile=source.kind==="file"?source.file:undefined;
@@ -51,6 +52,17 @@ export function HybridRepairPanel(){
  useEffect(()=>{setPreview(null);setHistory([]);setStart("00:00:00");setEnd("00:00:30");ctrl.current?.abort();},[session]);
  useEffect(()=>{if(!sourceFile)return;let cancelled=false;void readRepairHistory(sourceFile).then(items=>{if(!cancelled)setHistory(items);}).catch(()=>{});return()=>{cancelled=true;};},[sourceFile]);
  useEffect(()=>()=>ctrl.current?.abort(),[]);
+ useEffect(()=>{
+  const onRequest=(event:Event)=>{
+   const request=(event as CustomEvent<{start:number;end:number}>).detail;
+   if(!request||!Number.isFinite(request.start)||!Number.isFinite(request.end))return;
+   pick(Math.max(0,request.start),Math.max(request.start+1,request.end));
+   if(details.current){details.current.open=true;setShown(true);details.current.scrollIntoView({behavior:"smooth",block:"center"});}
+  };
+  window.addEventListener("cowatch:repair-range",onRequest);
+  return()=>window.removeEventListener("cowatch:repair-range",onRequest);
+ },[]);
+
  const pick=(a:number,b:number)=>{setStart(format(a));setEnd(format(b));setPreview(null);};
  const request=async()=>{
    if(!sourceFile){toast.error("请先打开本地视频");return;}
@@ -85,7 +97,7 @@ export function HybridRepairPanel(){
    const current=useApp.getState();current.setCues(mergeRepairCues(current.cues,entry.before,entry.range),"混合识别（已恢复历史原文）");
    toast.success("已经恢复修正之前的原文字幕；修订历史仍保留");
  };
- return <details className="rounded-lg border border-primary/40 bg-secondary/20 p-3 space-y-3 text-sm" onToggle={e=>setShown(e.currentTarget.open)}>
+ return <details ref={details} className="rounded-lg border border-primary/40 bg-secondary/20 p-3 space-y-3 text-sm" onToggle={e=>setShown(e.currentTarget.open)}>
   <summary className="cursor-pointer font-semibold">🎧 混合识别：只用 Groq 修正选中的片段</summary>
   {shown&&<div className="space-y-3 pt-2">
    <p className="text-xs text-muted-foreground">先用免费的本机 Whisper Base 转录整段视频，再指定不满意的时间段。共映只提取这段音频并发送给 Groq；结果先预览，确认后才替换。本地和云端的识别结果均保留时间戳。</p>
