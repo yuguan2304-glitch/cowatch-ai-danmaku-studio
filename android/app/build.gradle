@@ -6,8 +6,16 @@ android {
     namespace 'dev.cowatch.player'
     compileSdk 35
 
+    def offlineBundle = project.hasProperty('cowatchOffline') && project.property('cowatchOffline') == 'true'
+
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
-        applicationId 'dev.cowatch.player'
+        applicationId offlineBundle ? 'dev.cowatch.player.offline' : 'dev.cowatch.player'
+        buildConfigField 'boolean', 'OFFLINE_BUNDLE', offlineBundle ? 'true' : 'false'
+        resValue 'string', 'cowatch_app_name', offlineBundle ? '共映 离线版' : '共映 CoWatch'
         minSdk 26
         targetSdk 34
         versionCode Integer.parseInt(System.getenv('COWATCH_VERSION_CODE') ?: '1')
