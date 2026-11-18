@@ -12,7 +12,7 @@ import type { Cue } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { ModelPicker } from "@/components/theater/ModelPicker";
 import { useSubtitleDisplay } from "@/lib/subtitle-display";
-import { transcribeVideoWithAudioChunks } from "@/lib/ai/video-transcribe";
+import { transcribeVideoWithAudioChunks, recoverSavedVideoTranscript } from "@/lib/ai/video-transcribe";
 import { transcribeLocalVideo } from "@/lib/ai/local-transcribe";
 import { HybridRepairPanel } from "@/components/theater/HybridRepairPanel";
 import { TranscriptionReviewPanel } from "@/components/theater/TranscriptionReviewPanel";
@@ -284,6 +284,25 @@ export function TranslationPanel(){
  };
  const [cloudSample,setCloudSample]=useState(true);
 
+ const restoreCachedSubtitles=async()=>{
+   const file=source.file;
+   if(!file){toast.error("请先选择原来转录的同一个本地视频");return;}
+   const baseUrl=transcribePreset==="groq"?groqBaseUrl:transcribePreset==="cloudflare"?"https://cowatch-ai-danmaku-studio.yuguan2304.workers.dev":transcribePreset==="shared"?provider.baseUrl:provider.transcribeBaseUrl;
+   const model=transcribePreset==="cloudflare"?"@cf/openai/whisper-large-v3-turbo":transcribePreset==="groq"?groqModel:provider.transcribeModel;
+   const backend=transcribePreset==="cloudflare"?"cloudflare":transcribePreset==="groq"?"groq":"custom";
+   try {
+     // Probe both full-length and 30-second test checkpoints; no API requests.
+     const [full,sample]=await Promise.all([
+       recoverSavedVideoTranscript({file,baseUrl,model,backend}),
+       recoverSavedVideoTranscript({file,baseUrl,model,backend,maxSeconds:30})
+     ]);
+     const recovered=full.length>=sample.length?full:sample;
+     if(!recovered.length){toast.info("此视频在当前转录模型下没有找到已保存的分段缓存。请确认选择原视频与原转录模型。");return;}
+     if(cues.length>recovered.length && !confirm("当前字幕比缓存更多。用缓存替换可能丢失新增字幕，确定继续？"))return;
+     useApp.getState().setCues(recovered,"从 Groq/转录缓存恢复（无需 API）");
+     toast.success("已找回 "+recovered.length+" 段字幕，没有调用转录 API");
+   }catch(e){toast.error("读取本机缓存失败："+(e instanceof Error?e.message:String(e)));}
+ };
  const extractAudioSubtitles=async()=>{
    const file=source.file;
    if(!file){toast.error("请先打开本地视频文件");return;}
@@ -472,7 +491,7 @@ export function TranslationPanel(){
    </div>
    <p className="text-muted-foreground">只提交选中字幕的原文，不发送整段音频。调用付费翻译 API 前会再次确认。已翻译的选中句也可以重新翻译。</p>
  </div>}
- <div className="flex flex-wrap gap-2">{translationMode==="all"&&<Button size="sm" disabled={busy||!cues.length} onClick={()=>void run("cues")}>一键补齐视频翻译（{cues.length} 段）</Button>}<Button size="sm" disabled={busy||!comments.length} onClick={()=>void run("comments")}>翻译弹幕文本</Button>{busy&&<Button size="sm" variant="outline" onClick={()=>abort.current?.abort()}>取消</Button>}<Button size="sm" variant="outline" disabled={!cues.length} onClick={exportSrt}>导出 SRT</Button></div>
+ <div className="flex flex-wrap gap-2">{translationMode==="all"&&<Button size="sm" disabled={busy||!cues.length} onClick={()=>void run("cues")}>一键补齐视频翻译（{cues.length} 段）</Button>}<Button size="sm" disabled={busy||!comments.length} onClick={()=>void run("comments")}>翻译弹幕文本</Button>{busy&&<Button size="sm" variant="outline" onClick={()=>abort.current?.abort()}>取消</Button>}<Button size="sm" variant="outline" disabled={!source.file||busy} onClick={()=>void restoreCachedSubtitles()}>恢复已缓存的转录（免费）</Button><Button size="sm" variant="outline" disabled={!cues.length} onClick={exportSrt}>导出 SRT</Button></div>
  {!cues.length&&<p className="rounded border border-border bg-secondary/40 p-2 text-sm">尚无带时间戳的视频字幕。请先在播放器上方「导入字幕 SRT/VTT」，或使用「AI 转录音轨」生成字幕。没有字幕时不能可靠地翻译音轨。</p>}
  <label className="block text-sm">视频字幕显示 <select className="rounded border bg-background p-1" value={mode} onChange={e=>setMode(e.target.value as typeof mode)}><option value="both">双语</option><option value="original">原文</option><option value="translated">译文</option><option value="off">关闭</option></select></label>
  <div className="grid gap-3 rounded border border-border bg-secondary/20 p-3 text-sm sm:grid-cols-2">
