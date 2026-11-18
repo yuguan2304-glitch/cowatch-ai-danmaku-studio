@@ -58,17 +58,17 @@ jobs:
         run: gradle -p android :app:assembleDebug --no-daemon --stacktrace
       - name: Preserve original installer
         run: cp android/app/build/outputs/apk/debug/app-debug.apk cowatch-android-alpha.apk
-      - name: Build separate offline-launch Android APK
+      - name: Build separate bundled Alpha preview APK
         run: gradle -p android :app:assembleDebug -PcowatchOffline=true --no-daemon --stacktrace
-      - name: Preserve offline installer
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk cowatch-android-offline-alpha.apk
+      - name: Preserve Alpha preview installer
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk cowatch-android-alpha-preview.apk
       - name: Upload both APKs
         uses: actions/upload-artifact@v4
         with:
           name: CoWatch-Android-APK
           path: |
             cowatch-android-alpha.apk
-            cowatch-android-offline-alpha.apk
+            cowatch-android-alpha-preview.apk
           retention-days: 30
       - name: Publish prerelease for easy download
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -77,8 +77,8 @@ jobs:
         run: |
           gh release create "android-alpha-${{ github.run_number }}" \
             cowatch-android-alpha.apk \
-            cowatch-android-offline-alpha.apk \
+            cowatch-android-alpha-preview.apk \
             --title "共映 Android 测试版 #${{ github.run_number }}" \
-            --notes "包含原始在线 APK 和单独安装的离线启动 APK（文件名含 offline）；后者内置本次网页界面，不需访问 workers.dev 即可启动，但 AI API 仍需网络。两个版本数据互不自动同步；请勿卸载旧版以免丢失收藏。调试签名仅供测试。" \
+            --notes "包含原始在线 APK 和单独安装的 Alpha 预览测试 APK（文件名含 alpha-preview）；后者内置网页界面，不需访问 workers.dev 即可启动，但 AI API 仍需网络。两个版本数据互不自动同步；请勿卸载旧版以免丢失收藏。调试签名仅供测试。" \
             --prerelease \
             --target "${{ github.sha }}"
