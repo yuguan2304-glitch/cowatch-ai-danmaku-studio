@@ -6,6 +6,9 @@ import android.content.ContentValues;
 import android.content.ContentResolver;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.net.Uri;
@@ -13,6 +16,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import androidx.webkit.WebMessageCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
@@ -54,6 +58,8 @@ public final class MainActivity extends Activity {
     private static final int MAX_EXPORT_CHARS = 6 * 1024 * 1024;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WebView webView;
+    private long updateDownloadId = -1L;
+    private BroadcastReceiver updateReceiver;
     private WebViewAssetLoader localAssetLoader;
     private FrameLayout root;
     private LinearLayout connectionErrorView;
@@ -247,6 +253,57 @@ public final class MainActivity extends Activity {
                 });
         }
 
+        // Only our packaged first-party app origin may request updates.
+        // The URL is pinned to a single release artifact to prevent abuse.
+        if (BuildConfig.OFFLINE_BUNDLE && WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(webView, "CoWatchUpdater",
+                Collections.singleton("https://" + TRUSTED_HOST),
+                (view, message, origin, mainFrame, reply) -> {
+                    if (!mainFrame || !"https".equals(origin.getScheme())
+                        || !TRUSTED_HOST.equals(origin.getHost())
+                        || message.getType()!=WebMessageCompat.TYPE_STRING) return;
+                    try {
+                        JSONObject item=new JSONObject(message.getData());
+                        String updateUrl=item.optString("url","");
+                        if (!"download-update".equals(item.optString("action","")) ||
+                            !updateUrl.matches("https://github[.]com/yuguan2304-glitch/cowatch-ai-danmaku-studio/releases/download/android-alpha-[0-9]+/cowatch-android-alpha-preview[.]apk")) return;
+                        handler.post(() -> downloadAppUpdate(updateUrl));
+                    }catch(Exception ignored){}
+                });
+        }
+
+        updateReceiver = new BroadcastReceiver() {
+            @Override public void onReceive(Context context, Intent intent) {
+                if (!DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction()) ||
+                    intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID,-1L)!=updateDownloadId) return;
+                DownloadManager manager=(DownloadManager)getSystemService(DOWNLOAD_SERVICE);
+                Uri installed=manager.getUriForDownloadedFile(updateDownloadId);
+                updateDownloadId=-1L;
+                if(installed==null){
+                    Toast.makeText(MainActivity.this,"新版下载未成功，请点击共映「检查更新」重试",Toast.LENGTH_LONG).show();
+                    return;
+                }
+                try{
+                    if(Build.VERSION.SDK_INT>=26 && !getPackageManager().canRequestPackageInstalls()){
+                        Toast.makeText(MainActivity.this,"下载完成。安卓需要先允许共映安装更新，请授予权限后从下载目录打开 APK",Toast.LENGTH_LONG).show();
+                        Intent permission=new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:"+getPackageName()));
+                        startActivity(permission);
+                        return;
+                    }
+                    Intent install=new Intent(Intent.ACTION_VIEW);
+                    install.setDataAndType(installed,"application/vnd.android.package-archive");
+                    install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(install);
+                }catch(Exception e){
+                    Toast.makeText(MainActivity.this,"更新已下载，请在系统「下载」中打开 APK 安装",Toast.LENGTH_LONG).show();
+                }
+            }
+        };
+        IntentFilter updateFilter=new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+        if(Build.VERSION.SDK_INT>=33) registerReceiver(updateReceiver,updateFilter,Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(updateReceiver,updateFilter);
+
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
             Uri uri = Uri.parse(url);
             if (!"https".equals(uri.getScheme())) {
@@ -272,6 +329,22 @@ public final class MainActivity extends Activity {
         if (state == null) webView.loadUrl(HOME_URL);
         else webView.restoreState(state);
         handler.postDelayed(detectCinema, 500);
+    }
+
+    private void downloadAppUpdate(String url){
+        try{
+            DownloadManager.Request request=new DownloadManager.Request(Uri.parse(url));
+            request.setMimeType("application/vnd.android.package-archive");
+            request.setTitle("共映 Alpha 更新");
+            request.setDescription("安装更新将保留本机收藏和弹幕，请在安卓提示中确认安装");
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
+                "cowatch-alpha-update-"+System.currentTimeMillis()+".apk");
+            updateDownloadId=((DownloadManager)getSystemService(DOWNLOAD_SERVICE)).enqueue(request);
+            Toast.makeText(this,"新版开始下载，完成后将打开安卓安装确认",Toast.LENGTH_LONG).show();
+        }catch(Exception e){
+            Toast.makeText(this,"软件内下载失败，可在浏览器打开更新页",Toast.LENGTH_LONG).show();
+        }
     }
 
     private void buildConnectionErrorView() {
@@ -423,6 +496,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         handler.removeCallbacks(detectCinema);
+        if(updateReceiver!=null){try{unregisterReceiver(updateReceiver);}catch(Exception ignored){}updateReceiver=null;}
         if (pendingFileChooser != null) pendingFileChooser.onReceiveValue(null);
         pendingFileChooser = null;
         if (webView != null) {
