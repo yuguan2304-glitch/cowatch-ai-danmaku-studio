@@ -44,7 +44,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
           throw new Error("模型下载地址必须是有效的 HTTPS 域名");
         }
         env.remoteHost = parsed.origin + (parsed.pathname === "/api/model/v1/" ? parsed.pathname : "/");
-        env.remotePathTemplate = "{model}/resolve/{revision}/{file}";
+        // Transformers.js appends the resource filename itself; do NOT include {file} here.\n        env.remotePathTemplate = "{model}/resolve/{revision}/";
       }
       self.postMessage({kind: "progress", text: "首次使用：正在下载并缓存本地多语言语音模型（可能消耗较多流量）…"});
       recognizer = await createPipeline("automatic-speech-recognition", "onnx-community/whisper-tiny", {
