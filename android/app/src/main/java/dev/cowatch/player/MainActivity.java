@@ -31,10 +31,16 @@ import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Button;
+import android.view.Gravity;
 import android.widget.Toast;
 
 public final class MainActivity extends Activity {
@@ -45,6 +51,10 @@ public final class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WebView webView;
     private FrameLayout root;
+    private LinearLayout connectionErrorView;
+    private long loadSequence = 0;
+    private boolean mainPageFailed = false;
+    private static final long STARTUP_TIMEOUT_MS = 15000;
     private View customVideo;
     private WebChromeClient.CustomViewCallback customVideoCallback;
     private ValueCallback<Uri[]> pendingFileChooser;
@@ -78,6 +88,7 @@ public final class MainActivity extends Activity {
         webView = new WebView(this);
         root.addView(webView, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
+        buildConnectionErrorView();
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -91,6 +102,50 @@ public final class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
         webView.setWebViewClient(new WebViewClient() {
+            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                if (!url.startsWith("https://" + TRUSTED_HOST + "/")) return;
+                mainPageFailed = false;
+                final long attempt = ++loadSequence;
+                hideConnectionError();
+                handler.postDelayed(() -> {
+                    if (webView != null && loadSequence == attempt && !mainPageFailed) {
+                        webView.evaluateJavascript("(function(){var el=document.getElementById('root');return !!(el && el.children.length && el.innerText.trim().length)})()", value -> {
+                            if (webView != null && loadSequence == attempt && !"true".equals(value)) {
+                                showConnectionError("页面加载超时。当前网络可能无法访问共映的 Cloudflare 域名。");
+                            }
+                        });
+                    }
+                }, STARTUP_TIMEOUT_MS);
+            }
+            @Override public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                if (mainPageFailed || !url.startsWith("https://" + TRUSTED_HOST + "/")) return;
+                final long attempt = loadSequence;
+                // Even an HTTP 200 may render blank if a JS bundle fails to load.
+                handler.postDelayed(() -> {
+                    if (webView == null || loadSequence != attempt || mainPageFailed) return;
+                    webView.evaluateJavascript("(function(){var el=document.getElementById('root');return !!(el && el.children.length && el.innerText.trim().length)})()", value -> {
+                        if (webView == null || loadSequence != attempt) return;
+                        if ("true".equals(value)) hideConnectionError();
+                        else showConnectionError("网页已连接，但界面没有加载出来。可以重试或换网络。");
+                    });
+                }, 2500);
+            }
+            @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                if (request.isForMainFrame()) {
+                    mainPageFailed = true;
+                    showConnectionError("无法连接共映网站（网络错误 " + error.getErrorCode() + "）。可能是当前网络无法访问 workers.dev。");
+                }
+            }
+            @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+                super.onReceivedHttpError(view, request, response);
+                if (request.isForMainFrame() && response.getStatusCode() >= 400) {
+                    mainPageFailed = true;
+                    showConnectionError("共映网站返回 HTTP " + response.getStatusCode() + "，请重试或稍后再试。");
+                }
+            }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return false;
                 Uri url = request.getUrl();
@@ -188,6 +243,54 @@ public final class MainActivity extends Activity {
         if (state == null) webView.loadUrl(HOME_URL);
         else webView.restoreState(state);
         handler.postDelayed(detectCinema, 500);
+    }
+
+    private void buildConnectionErrorView() {
+        connectionErrorView = new LinearLayout(this);
+        connectionErrorView.setOrientation(LinearLayout.VERTICAL);
+        connectionErrorView.setGravity(Gravity.CENTER);
+        connectionErrorView.setPadding(40, 40, 40, 40);
+        connectionErrorView.setBackgroundColor(0xff141110);
+        TextView message = new TextView(this);
+        message.setTag("connection-message");
+        message.setTextColor(0xfff6e7d4);
+        message.setTextSize(16);
+        message.setGravity(Gravity.CENTER);
+        connectionErrorView.addView(message, new LinearLayout.LayoutParams(-1, -2));
+        Button retry = new Button(this);
+        retry.setText("重新连接");
+        retry.setOnClickListener(v -> {
+            hideConnectionError();
+            if (webView != null) webView.loadUrl(HOME_URL);
+        });
+        connectionErrorView.addView(retry, new LinearLayout.LayoutParams(-2, -2));
+        Button browser = new Button(this);
+        browser.setText("在浏览器中打开");
+        browser.setOnClickListener(v -> {
+            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(HOME_URL))); }
+            catch (Exception ignored) { Toast.makeText(this, "无法启动浏览器", Toast.LENGTH_SHORT).show(); }
+        });
+        connectionErrorView.addView(browser, new LinearLayout.LayoutParams(-2, -2));
+        TextView note = new TextView(this);
+        note.setText("这不是 API 密钥的问题。共映当前使用 Cloudflare 默认域名，在部分网络中可能无法连接。请勿卸载应用或清除数据，以免丢失本地收藏。");
+        note.setTextSize(12);
+        note.setTextColor(0xffb8aaa0);
+        note.setGravity(Gravity.CENTER);
+        connectionErrorView.addView(note, new LinearLayout.LayoutParams(-1, -2));
+        connectionErrorView.setVisibility(View.GONE);
+        root.addView(connectionErrorView, new FrameLayout.LayoutParams(-1, -1));
+    }
+
+    private void showConnectionError(String reason) {
+        if (connectionErrorView == null || customVideo != null) return;
+        TextView message = (TextView) connectionErrorView.findViewWithTag("connection-message");
+        if (message != null) message.setText("共映暂时无法进入\\n\\n" + reason);
+        connectionErrorView.setVisibility(View.VISIBLE);
+        connectionErrorView.bringToFront();
+    }
+
+    private void hideConnectionError() {
+        if (connectionErrorView != null) connectionErrorView.setVisibility(View.GONE);
     }
 
     // Downloads provider handles scoped storage on Android 10+ without broad permissions.
