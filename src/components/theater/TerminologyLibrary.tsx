@@ -131,10 +131,10 @@ export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
      <div className="grid grid-cols-2 gap-2">
       <Input value={source} onChange={e=>setSource(e.target.value)} placeholder="原词，如 Ender Pearl"/>
       <Input value={target} onChange={e=>setTarget(e.target.value)} placeholder="译名，如 末影珍珠"/>
-     </details>
+     </div>
      <Input value={note} onChange={e=>setNote(e.target.value)} placeholder="备注（可选）：语境、角色、习惯用法"/>
      <Button size="sm" type="button" onClick={addEntry}>添加到 {current.name}</Button>
-    </div>
+    </details>
     <details className="space-y-2 border border-border rounded p-2">
      <summary className="cursor-pointer text-xs font-semibold">展开编辑「{current.name}」全部术语（{current.entries.length} 条）</summary>
      <div className="max-h-72 space-y-2 overflow-y-auto pt-2">
