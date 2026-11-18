@@ -234,7 +234,8 @@ public final class MainActivity extends Activity {
                         String content = data.optString("content", "");
                         if (!("cowatch.json".equals(name) || "cowatch.xml".equals(name)
                                 || "cowatch-worldbook.txt".equals(name)
-                                || "cowatch-imported-worldbook.json".equals(name))
+                                || "cowatch-imported-worldbook.json".equals(name)
+                                || "cowatch-sync.json".equals(name))
                             || !(mime.startsWith("application/json") || mime.startsWith("application/xml")
                                 || mime.startsWith("text/plain"))) return;
                         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
