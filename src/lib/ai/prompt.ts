@@ -108,6 +108,13 @@ export function buildSystemPrompt(a: AudienceConfig, noSpoiler: boolean, title =
     "- 每条弹幕简短口语化，通常 4~25 个字（英文不超过 12 个词），像真实弹幕，不要客服腔，不要编号。",
     "- 弹幕时间 time 必须在本片段起止秒数之内（含小数），并与对应画面/字幕时刻对齐，分布自然，可在高能时刻扎堆。",
     "- 不要输出重复或近义重复的弹幕；不要重复「最近弹幕」里已有的内容。",
+    "- 质量优先于数量：先找有明确依据的笑点、失误、反转、细节和人物反应，再决定哪些时刻值得发弹幕；平淡片段允许稀疏，不要为了凑数刷「哈哈哈」「笑死」「好家伙」。",
+    "- 优先具体观察：能看出具体道具、人物站位、画面变化或字幕内容时，针对这些事实写有信息量的反应，避免任何视频都能套用的万能句。",
+    "- 保持观众之间的分歧与个性：有人关注操作，有人关注剧情，有人吐槽节奏；相同画面不应让十个人发表同一个意思。少量自然接话，不刻意排队。",
+    "- 弹幕应贴着事件出现：重要字幕对应其字幕时间；无法定位动作时靠近对应截图时间，不要把全部弹幕平均摊在整段或挤在开头。",
+    "- 不能凭一两张抽帧脑补完整的连续动作、对白、输赢、玩家身份或某人意图；不确定时表达疑问，避免把猜测说成确定事实。",
+    "- 有素材依据才用圈内梗、CP 玩梗和世界书；禁止无关刷梗、硬套关系或将世界书设定当作视频里发生的事件。",
+
     "- 不要出现人身攻击、歧视、色情、违法内容。",
     "- 严格输出 JSON 对象：{\"danmaku\":[{\"time\":秒数,\"text\":\"弹幕\",\"viewer\":\"观众名或身份\",\"color\":\"#RRGGBB\"}]}，不要输出其它文字。",
     "- color 大多为 #FFFFFF，少量使用 #FE0302 #FFD302 #00CD00 #89D5FF #FF8FC8 等高亮色表达情绪。",
@@ -173,7 +180,7 @@ export function buildSegmentText(s: SegmentPromptInput): string {
   const lines = [
     `视频：${s.title || "未命名"}`,
     `本片段：${s.start.toFixed(1)}s – ${s.end.toFixed(1)}s（${formatTime(s.start)}–${formatTime(s.end)}）`,
-    `请生成约 ${s.count} 条弹幕，time 必须在 ${s.start.toFixed(1)} 到 ${s.end.toFixed(1)} 之间。`,
+    `目标最多 ${s.count} 条弹幕（质量优先，不要为凑数编造事件），time 在 ${s.start.toFixed(1)} 到 ${s.end.toFixed(1)} 之间；请优先抓住有依据的具体时刻。`,
   ];
   if (s.hasVideoClip) {
     lines.push("素材：附带了本片段的视频（含音轨）。");
@@ -192,7 +199,7 @@ export function buildSegmentText(s: SegmentPromptInput): string {
     lines.push("", "字幕/转录（仅本片段及之前可见部分）：");
     for (const c of s.cues.slice(-80)) lines.push(`[${c.start.toFixed(1)}s] ${c.text}`);
   } else {
-    lines.push("", "（本片段无字幕）");
+    lines.push("", "（本片段无字幕：没有对白文字证据，只能根据实际画面和有限的本地音量线索反应，不能编造对话与音效）");
   }
   if (s.globalContext) lines.push("", "全局字幕上下文（节选）：", s.globalContext);
   if (s.memory.length) {
