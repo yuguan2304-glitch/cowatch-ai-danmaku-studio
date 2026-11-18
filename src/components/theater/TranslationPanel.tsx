@@ -38,10 +38,10 @@ export function TranslationPanel(){
  const [rememberTranslationKey,setRememberTranslationKey]=useState(()=>loadTranslationPrefs()?.rememberSecret??false);
  const [rememberTranscription,setRememberTranscription]=useState(()=>loadTranscriptionPrefs()!==null);
  const [rememberTranscriptionKey,setRememberTranscriptionKey]=useState(()=>loadTranscriptionPrefs()?.rememberSecret??false);
- const [transcribePreset,setTranscribePreset]=useState<"groq"|"shared"|"custom">(()=>{
+ const [transcribePreset,setTranscribePreset]=useState<"groq"|"cloudflare"|"shared"|"custom">(()=>{
    try {
      const saved=localStorage.getItem("cowatch:transcribe-preset:v1");
-     return saved==="shared"||saved==="custom"?saved:"groq";
+     return saved==="cloudflare"||saved==="shared"||saved==="custom"?saved:"groq";
    }catch{return "groq";}
  });
  useEffect(()=>{
@@ -203,20 +203,34 @@ export function TranslationPanel(){
  const extractAudioSubtitles=async()=>{
    const file=source.file;
    if(!file){toast.error("请先打开本地视频文件");return;}
-   const baseUrl=transcribePreset==="groq"?groqBaseUrl:transcribePreset==="shared"?provider.baseUrl:provider.transcribeBaseUrl;
+   const baseUrl=transcribePreset==="groq"?groqBaseUrl:transcribePreset==="cloudflare"?"https://cowatch-ai-danmaku-studio.yuguan2304.workers.dev":transcribePreset==="shared"?provider.baseUrl:provider.transcribeBaseUrl;
    const checked=checkBaseUrl(baseUrl);
    if(!checked.ok){toast.error(checked.reason);return;}
-   const transKey=transcribePreset==="groq"?transcriptionKey:transcribePreset==="shared"?key:(provider.transcribeUseMainKey?key:transcriptionKey);
-   const transModel=transcribePreset==="groq"?groqModel:provider.transcribeModel;
+   const transKey=transcribePreset==="cloudflare"?"cloudflare-sync":transcribePreset==="groq"?transcriptionKey:transcribePreset==="shared"?key:(provider.transcribeUseMainKey?key:transcriptionKey);
+   const transModel=transcribePreset==="cloudflare"?"@cf/openai/whisper-large-v3-turbo":transcribePreset==="groq"?groqModel:provider.transcribeModel;
    if(!transKey){toast.error(transcribePreset==="groq"?"请在下方填写自己的 Groq API Key（免费额度属于你自己的账户）。":"请先配置所选接口密钥。");return;}
+   if(transcribePreset==="cloudflare" && !cloudSample){
+     const {readSyncCode}=await import("@/lib/cloud-sync");
+     if(!readSyncCode()){toast.error("使用 Cloudflare 之前，请先在「多设备自动同步」建立配对空间并点击一次立即同步");return;}
+   }
    const large=file.size>25*1024*1024;
    if(!confirm(cloudSample
      ?"仅将视频开头约 30 秒的音频发送到 "+checked.url.host+" 的语音转录接口测试，可能产生费用。继续？"
      :large?"将从视频实时提取压缩音频，分段发送到 "+checked.url.host+" 转录，可能产生费用且需要保持前台。继续？"
      :"将视频「"+file.name+"」发送到 "+checked.url.host+" 转录，可能产生费用。继续？"))return;
    const ctrl=new AbortController();abort.current=ctrl;setBusy(true);
+   const activeSession=useApp.getState().sessionId;
    try{
-     const result=await transcribeVideoWithAudioChunks({baseUrl,apiKey:transKey,model:transModel,file,signal:ctrl.signal,...(cloudSample?{maxSeconds:30}:{}),onProgress:setTranscriptionProgress});
+     const result=await transcribeVideoWithAudioChunks({baseUrl,apiKey:transKey,model:transModel,file,signal:ctrl.signal,
+      backend:transcribePreset==="cloudflare"?"cloudflare":transcribePreset==="groq"?"groq":"custom",
+      ...(cloudSample?{maxSeconds:30}:{}),
+      onProgress:setTranscriptionProgress,
+      onPartial:items=>{
+        if(useApp.getState().sessionId===activeSession&&!ctrl.signal.aborted && items.length){
+          useApp.getState().setCues(items,"已缓存的部分语音转录（可断点继续）");
+        }
+      },
+    });
      if(!result.timestamped){toast.error("转录结果没有时间戳，无法自动与视频对齐。请改用支持时间戳的模型。");return;}
      useApp.getState().setCues(result.cues,cloudSample?"云端转录测试（前30秒）":"AI 音轨转录");
      toast.success("提取成功！已得到 "+result.cues.length+" 段字幕。接下来点击「翻译视频字幕」。");
@@ -238,12 +252,17 @@ export function TranslationPanel(){
      <p className="font-semibold">语音转录服务</p>
      <label className="block text-xs">选择转录来源
        <select className="w-full rounded border bg-background p-2" disabled={busy} value={transcribePreset} onChange={e=>setTranscribePreset(e.target.value as typeof transcribePreset)}>
-         <option value="groq">Groq 免费额度（推荐新用户）</option>
+         <option value="groq">Groq 免费额度（已验证可用）</option>
+         <option value="cloudflare">Cloudflare Workers AI（新增，带每日保护上限）</option>
          <option value="shared">复用弹幕中转站 API</option>
          <option value="custom">其他独立转录 API</option>
        </select>
      </label>
-     {transcribePreset==="groq"?<>
+     {transcribePreset==="cloudflare"?<>
+       <p className="text-xs">模型：<code>@cf/openai/whisper-large-v3-turbo</code>。首次使用请在「多设备自动同步」创建配对码、点击一次立即同步，云端用此配对空间校验请求。</p>
+       <p className="text-xs text-amber-500">安全保护：每个配对空间每日最多 60 分钟，所有用户合计每日最多 120 分钟；超出后停下，次日可从已保存的分段继续。Cloudflare 额度按 UTC 日重置。它不是无限免费额度，实际免费与收费由你的 Cloudflare 账户决定，使用前请检查账户计费状态。</p>
+       <p className="text-xs text-muted-foreground">这是新接入的转录来源，音轨会送至你配置的 Cloudflare Workers AI，准确率、格式兼容性需实测。你的 Groq 密钥不会发送给 Cloudflare。</p>
+     </>:transcribePreset==="groq"?<>
        <p className="text-xs text-muted-foreground">Groq 为每个账户提供有限的免费语音转录额度；需要先申请自己的 API Key。网站不会提供公共密钥，也不会自动购买付费额度。</p>
        <p className="text-xs break-all">接口：<code>{groqBaseUrl}/audio/transcriptions</code></p>
        <p className="text-xs">模型：<code>{groqModel}</code></p>
@@ -266,7 +285,7 @@ export function TranslationPanel(){
      {!cloudSample&&<p className="rounded border border-primary/30 bg-secondary/30 p-2 text-xs">整段识别模式已开启：会处理完整视频的音轨。较长视频将在手机上按约 3 分钟一段提取，须保持共映在前台；关掉应用可能中断录制。整段成功后会替换当前试用的前 30 秒字幕。</p>}
      <Button size="sm" disabled={busy||source.kind!=="file"} onClick={()=>void extractAudioSubtitles()}>{cloudSample?"测试识别前30秒":"转录整段视频"}</Button>
      {source.kind!=="file" && <p role="status" className="text-xs text-amber-500">⚠️ 按钮不可点击：请先关闭设置，在播放器上方选择「打开本地视频」并等待视频加载成功。在线视频链接不支持直接提取音轨。</p>}
-     <p className="text-xs text-muted-foreground">整段转录时，大视频会在手机本地提取压缩音频，再分段传给转录 API；无需下载 Whisper 本地模型。</p>
+     <p className="text-xs text-muted-foreground">整段转录时，大视频会在手机本地提取压缩音频，再分段传给转录 API；已完成片段保存在本机，取消或失败后重新打开同一视频、选相同服务继续即可跳过已完成分段。无需下载 Whisper 本地模型。</p>
    </div>
    <details className="rounded border border-border bg-background/60 p-2 text-xs space-y-2">
      <summary className="cursor-pointer font-semibold">其他方法：本机模型识别（需额外下载大文件）</summary>
