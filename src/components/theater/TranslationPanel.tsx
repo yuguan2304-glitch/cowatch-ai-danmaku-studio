@@ -162,7 +162,8 @@ export function TranslationPanel(){
  const previousCuesRef=useRef<Cue[]>([]);
  const previousTranslationsRef=useRef<Record<number,string>>({});
  const previousConfigRef=useRef("");
- const currentConfig=JSON.stringify([session,target,service,translationUrl,translationModel,provider.baseUrl,provider.model,effectiveGlossary]);
+ // Provider/model changes should never discard visible translations of the same original cues.
+ const currentConfig=JSON.stringify([target]);
  const readCache=(k:string)=>{try{return localStorage.getItem("cowatch:translation:"+k)??undefined;}catch{return undefined;}};
  const writeCache=(k:string,v:string)=>{
    try{localStorage.setItem("cowatch:translation:"+k,v);}
