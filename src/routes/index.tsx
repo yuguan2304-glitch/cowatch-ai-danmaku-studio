@@ -21,6 +21,7 @@ import { TranslationPanel } from "@/components/theater/TranslationPanel";
 import { ModelPicker } from "@/components/theater/ModelPicker";
 import { CommentSection } from "@/components/theater/CommentSection";
 import { SavedTheater } from "@/components/theater/SavedTheater";
+import { CloudSyncPanel } from "@/components/theater/CloudSyncPanel";
 import { ShipControls } from "@/components/theater/ShipControls";
 import { WorldBookImport } from "@/components/theater/WorldBookImport";
 
@@ -66,6 +67,7 @@ export function Index() {
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 pb-10">
           <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🎬 视频辅助工具</summary><SourceBar toolsOnly/></details>
           <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🎛️ 弹幕显示</summary><DisplayControls inDrawer/></details>
+          <CloudSyncPanel/>
           <GenerationPanel/>
           <TranslationPanel/>
                   <details className="panel group space-y-2 p-3"><summary className="cursor-pointer list-item font-bold">💬 弹幕列表 · {s.danmaku.length} 条</summary>
