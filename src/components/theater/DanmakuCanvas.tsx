@@ -46,19 +46,36 @@ export function DanmakuCanvas() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || size.w === 0) return;
-    const dpr = window.devicePixelRatio || 1;
+    // Cap canvas resolution on high-DPI phones to avoid excessive GPU fill cost.
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     canvas.width = size.w * dpr;
     canvas.height = size.h * dpr;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     let raf = 0;
-    const draw = () => {
+    let lastFrame = -Infinity;
+    let lastTime = NaN;
+    const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
+      // 30fps is sufficient for scrolling comments and halves the drawing load
+      // on phones with 60/90/120Hz displays.
+      if (now - lastFrame < 33) return;
+      lastFrame = now;
+      const clock = getClock();
+      if (!display.enabled || !clock) {
+        if(!Number.isNaN(lastTime)) {
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, size.w, size.h);
+          lastTime = NaN;
+        }
+        return;
+      }
+      const t = clock.getTime() - (display.timeOffset ?? 0);
+      // Avoid redrawing unchanged paused frames.
+      if (Math.abs(t - lastTime) < 0.005) return;
+      lastTime = t;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, size.w, size.h);
-      const clock = getClock();
-      if (!display.enabled || !clock) return;
-      const t = clock.getTime() - (display.timeOffset ?? 0);
       ctx.font = font;
       ctx.textBaseline = "top";
       ctx.lineJoin = "round";
