@@ -29,6 +29,28 @@ export function exportScreeningPackage(screening: SavedScreening): void {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
+/**
+ * Android WebView may not download generated blob: URLs even if an export
+ * click appears successful. Try the OS share sheet instead; this can save
+ * the original video to Files/Drive/Nearby Share without re-encoding it.
+ * This is intentionally a user-initiated share, never an upload to CoWatch.
+ */
+export function shareSavedVideo(screening: SavedScreening): Promise<void> {
+  const file = screening.file;
+  if (screening.sourceKind !== "file" || !file)
+    return Promise.reject(new Error("这部收藏没有可分享的本地视频副本"));
+  if (!navigator.share)
+    return Promise.reject(new Error("当前旧版 App 不支持系统文件分享。请先用云同步保住弹幕，暂时不要卸载旧版。"));
+  const video = new File([file], file.name || "cowatch-video.mp4", {
+    type: file.type || "video/mp4",
+    lastModified: file.lastModified,
+  });
+  const data: ShareData = { files: [video], title: "共映视频备份：" + screening.title };
+  if (navigator.canShare && !navigator.canShare({files:[video]}))
+    return Promise.reject(new Error("当前系统不支持分享这段视频（可能与大小或文件类型有关）。请勿清理旧版数据。"));
+  return navigator.share(data);
+}
+
 export async function importScreeningPackage(file: File): Promise<SavedScreening> {
   const initial = await file.slice(0, 1024).text();
   if (!initial.startsWith(MAGIC)) throw new Error("不是有效的共映放映包");
