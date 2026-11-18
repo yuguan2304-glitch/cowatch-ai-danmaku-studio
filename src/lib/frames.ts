@@ -95,6 +95,33 @@ export class FrameExtractor {
     return out;
   }
 
+  /**
+   * On fast-cut videos, probe extra views between already sampled frames only
+   * where their appearance differs significantly. This increases continuity
+   * without making an extra AI request or sampling every second.
+   */
+  async captureAdaptive(times:number[],maxWidth:number,quality:number,signal?:AbortSignal) {
+    const initial=await this.capture(times,maxWidth,quality,signal);
+    if(initial.length<2)return initial;
+    const cuts: number[]=[];
+    for(let i=1;i<initial.length;i++){
+      const current=initial[i]!;
+      const previous=initial[i-1]!;
+      if((current.visualChange??0)<25)continue;
+      const distance=current.time-previous.time;
+      if(distance<=1.2)continue;
+      const midpoint=Math.round((previous.time+distance/2)*10)/10;
+      if(midpoint>previous.time+0.5 && midpoint<current.time-0.5)cuts.push(midpoint);
+      if(cuts.length>=4)break;
+    }
+    if(!cuts.length)return initial;
+    const added=await this.capture(cuts,maxWidth,quality,signal);
+    // visualChange values on the added capture are calculated only within its
+    // own sample sequence; don't interpret them as cross-scene motion.
+    return [...initial,...added.map(({time,dataUrl})=>({time,dataUrl}))]
+      .sort((a,b)=>a.time-b.time);
+  }
+
   dispose() {
     this.video.removeAttribute("src");
     this.video.load();
