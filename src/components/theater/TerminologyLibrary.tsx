@@ -55,7 +55,7 @@ export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
  };
  const exportGroup=()=>{
   if(!current)return;
-  downloadText(current.name.replace(/[\\/:*?"<>|]/g,"_")+"-共映术语.json",JSON.stringify({format:"cowatch-terms-v1",name:current.name,entries:current.entries},null,2),"application/json");
+  downloadText("cowatch-imported-worldbook.json",JSON.stringify({format:"cowatch-terms-v1",name:current.name,entries:current.entries},null,2),"application/json");
  };
  return <details className="rounded-lg border border-border p-3 text-sm">
   <summary className="cursor-pointer font-semibold">📚 分类术语库 · {groups.length} 类（导入、编辑、保存、切换）</summary>
