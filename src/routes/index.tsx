@@ -34,6 +34,8 @@ export function Index() {
   const transcribeKey = useSecrets(x => x.transcribeKey);
   const setTranscribeKey = useSecrets(x => x.setTranscribeKey);
   const rememberKey = useSecrets(x => x.rememberKey);
+  const rememberSecret = useSecrets(x => x.rememberSecret);
+  const setRememberSecret = useSecrets(x => x.setRememberSecret);
   const setRememberKey = useSecrets(x => x.setRememberKey);
   const clearKeys = useSecrets(x => x.clearKeys);
   const [settingsOpen,setSettingsOpen] = useState(false);
@@ -77,13 +79,14 @@ export function Index() {
         </details>
 
           <fieldset disabled={s.generating} className="min-w-0 space-y-3">
-        <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🔑 AI 接口设置</summary><p className="text-xs text-muted-foreground">每位使用者自备 API 额度，站主不承担任何 AI 费用。密钥只保存在当前页面内存，刷新或关闭即清除，不会写入链接、日志或本机存储；内容仅发送至你选择的服务商。</p><p className="truncate text-xs text-muted-foreground" title={p.model}>当前模型：{p.model || "未选择"}</p>
+        <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🔑 AI 接口设置</summary><p className="text-xs text-muted-foreground">每位使用者自备 API 额度，站主不承担任何 AI 费用。默认不保存 API 密钥。你可以在自己的手机或电脑上勾选「记住密钥」，以后打开共映自动填入；该选项会将密钥以明文形式保存在当前浏览器的本地存储中，不会同步到云端。只在私有设备启用。</p><p className="truncate text-xs text-muted-foreground" title={p.model}>当前模型：{p.model || "未选择"}</p>
           <div className="flex flex-wrap gap-1">{PROVIDER_PRESETS.map(x=><Button key={x.label} size="sm" variant="outline" onClick={()=>{setKey("");s.update("provider",{kind:x.kind,baseUrl:x.baseUrl,model:x.model});}}>{x.label}</Button>)}</div>
           <label className="block text-sm">接口类型 <select className="w-full rounded border bg-background p-2" value={p.kind} onChange={e=>{setKey("");s.update("provider",{kind:e.target.value==="gemini"?"gemini":"openai"});}}><option value="openai">OpenAI 兼容</option><option value="gemini">Gemini 原生</option></select></label>
           <label className="block text-sm">API 地址<Input value={p.baseUrl} onChange={e=>{setKey("");s.update("provider",{baseUrl:e.target.value});}}/></label>
           <ModelPicker kind={p.kind} baseUrl={p.baseUrl} apiKey={key} model={p.model} onModelChange={model=>s.update("provider",{model})}/>
           <label className="block text-sm">API 密钥<Input type="password" name="cowatch-temp-api-secret" autoComplete="new-password" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
-          <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={rememberKey} onChange={e=>setRememberKey(e.target.checked)}/> <span>记住此设备上的中转站地址（可选，不含密钥）<span className="block text-xs text-muted-foreground">仅保存接口地址；API 密钥永远不会被保存，刷新后需重新填写。请勿在共享设备启用。</span></span></label>
+          <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={rememberSecret} onChange={e=>setRememberSecret(e.target.checked)}/> <span>记住此设备的 API 密钥（可选）<span className="block text-xs text-amber-500">启用后密钥会以明文形式保存在当前浏览器/应用的本地存储中；不要在共享设备开启。关闭此选项或点击「清除密钥和地址」会移除已保存的密钥。</span></span></label>
+          <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={rememberKey} onChange={e=>setRememberKey(e.target.checked)}/> <span>记住此设备上的中转站地址（可选，不含密钥）<span className="block text-xs text-muted-foreground">仅保存接口地址；只保存接口地址；是否保存 API 密钥由上方独立选项控制。</span></span></label>
           <Button size="sm" variant="outline" type="button" onClick={()=>{clearKeys();setTestResult("");s.update("provider",{baseUrl:"https://api.openai.com/v1",transcribeBaseUrl:"https://api.openai.com/v1"});toast.success("已清除密钥与记住的中转站地址");}}>清除密钥和地址</Button>
           {p.kind==="gemini"?<label className="block text-sm">输入方式 <select className="w-full rounded border bg-background p-2" value={p.geminiInput} onChange={e=>s.update("provider",{geminiInput:e.target.value==="video"?"video":"frames"})}><option value="frames">抽帧</option><option value="video">原生视频（小文件）</option></select></label>:<label className="flex gap-2 text-sm"><input type="checkbox" checked={p.jsonMode} onChange={e=>s.update("provider",{jsonMode:e.target.checked})}/>要求 JSON 模式</label>}
           <Button disabled={testing} onClick={()=>void test()}>{testing?"测试中…":"测试连接"}</Button>
