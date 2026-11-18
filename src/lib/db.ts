@@ -29,7 +29,13 @@ function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) 
       new Promise<T>((resolve, reject) => {
         const t = db.transaction(store, mode);
         const req = fn(t.objectStore(store));
-        req.onsuccess = () => resolve(req.result);
+        req.onsuccess = () => {
+          resolve(req.result);
+          if (mode === "readwrite" && typeof window !== "undefined") {
+            // Allow any signed-in sync client to upload shortly after a local save.
+            window.dispatchEvent(new Event("cowatch:local-data-changed"));
+          }
+        };
         req.onerror = () => reject(req.error);
       }),
   );
