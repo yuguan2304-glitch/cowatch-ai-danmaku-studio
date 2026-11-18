@@ -39,7 +39,7 @@ export function parseTermFile(name:string,text:string):TermEntry[]{
   else if(parsed&&typeof parsed==="object"){
    const data=parsed as Record<string,unknown>;
    if(Array.isArray(data["entries"]))rows=data["entries"];
-   else if(Array.isArray(data["term"]s))rows=data["term"]s;
+   else if(Array.isArray(data["terms"]))rows=data["terms"];
    else if(data["character_book"]&&typeof data["character_book"]==="object"&&Array.isArray((data["character_book"] as Record<string,unknown>).entries))rows=(data["character_book"] as {entries:unknown[]}).entries;
    else rows=Object.entries(data).map(([source,target])=>({source,target}));
   }
