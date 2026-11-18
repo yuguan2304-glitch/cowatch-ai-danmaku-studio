@@ -48,6 +48,9 @@ jobs:
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
       - uses: oven-sh/setup-bun@v2
       - name: Build offline CoWatch web interface
+        env:
+          VITE_COWATCH_SUPABASE_URL: ${{ vars.COWATCH_SUPABASE_URL }}
+          VITE_COWATCH_SUPABASE_PUBLISHABLE_KEY: ${{ vars.COWATCH_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           bun install --no-save
           bun run build
