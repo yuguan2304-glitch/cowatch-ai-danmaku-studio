@@ -17,6 +17,8 @@ import type { Segment } from "../types";
 let controller: AbortController | null = null;
 let extractor: FrameExtractor | null = null;
 let videoCache: { file: File; base64: string } | null = null;
+let sceneSession = "";
+const sceneMemory = new Map<number,string>();
 
 const sleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -98,6 +100,7 @@ function pickNext(): Segment | null {
 async function runSegment(seg: Segment, signal: AbortSignal) {
   const st = useApp.getState();
   const { settings, source, cues, duration } = st;
+  if(sceneSession!==st.sessionId){sceneSession=st.sessionId;sceneMemory.clear();}
   const { apiKey } = useSecrets.getState();
   const material = describeMaterial();
   const isLast = seg.end >= duration - 0.01;
@@ -115,7 +118,7 @@ async function runSegment(seg: Segment, signal: AbortSignal) {
   if (frameTimes.length) {
     if (!extractor) extractor = new FrameExtractor(source.src, source.crossOrigin);
     try {
-      images = await extractor.capture(frameTimes, settings.analysis.frameMaxWidth, settings.analysis.jpegQuality, signal);
+      images = await extractor.captureAdaptive(frameTimes, settings.analysis.frameMaxWidth, settings.analysis.jpegQuality, signal);
     } catch (e) {
       if (e instanceof CorsTaintedError) {
         useApp.getState().patchSource({ analyzable: false, note: e.message });
@@ -133,6 +136,9 @@ async function runSegment(seg: Segment, signal: AbortSignal) {
   }
 
   const noSpoiler = settings.generation.noSpoiler;
+  const recentScenes = Array.from(sceneMemory.entries()).filter(([end])=>end<=seg.start+0.01)
+    .sort((a,b)=>a[0]-b[0]).slice(-5)
+    .map(([end,text])=>`[${end.toFixed(1)}s] ${text}`).join("\n");
   const segCues = noSpoiler ? cuesInRange(cues, Math.max(0, seg.start - 20), seg.end) : cuesInRange(cues, seg.start, seg.end);
   const globalContext = !noSpoiler && cues.length
     ? cues.map((c) => c.text).join(" / ").slice(0, 3000)
@@ -164,6 +170,7 @@ async function runSegment(seg: Segment, signal: AbortSignal) {
     cues: segCues,
     memory,
     globalContext,
+    sceneMemory: recentScenes,
     hasVideoClip: !!video,
     localClues,
     title: source.label,
@@ -205,6 +212,14 @@ async function runSegment(seg: Segment, signal: AbortSignal) {
       `模型返回 0 条有效弹幕（越界 ${rejected.outOfRange}，重复 ${rejected.duplicate}，格式错误 ${rejected.invalid}）`,
       { retryable: true },
     );
+  }
+  if(parsed && typeof parsed==="object" && !Array.isArray(parsed)){
+    const summary=(parsed as Record<string,unknown>)["sceneSummary"];
+    if(typeof summary==="string" && summary.trim()){
+      sceneMemory.set(seg.end,summary.trim().slice(0,120));
+      // Limit memory growth for long game videos.
+      if(sceneMemory.size>12)sceneMemory.delete(sceneMemory.keys().next().value!);
+    }
   }
   if (current.demo) current.setDanmaku([], false);
   useApp.getState().removeRange(seg.start, seg.end, isLast);
@@ -329,6 +344,8 @@ export function cancelGeneration() {
 }
 
 export function resetVideoCache() {
+  sceneSession = "";
+  sceneMemory.clear();
   videoCache = null;
   clearLocalAudioCache();
 }
