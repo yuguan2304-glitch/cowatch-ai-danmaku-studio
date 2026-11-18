@@ -1,0 +1,52 @@
+name: Windows CoWatch Alpha Installer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build local-first web interface
+        shell: bash
+        run: |
+          bun install --no-save
+          bun run build
+          test -f dist/index.html
+          mkdir -p desktop/web
+          cp -R dist/. desktop/web/
+      - name: Install Electron desktop packager
+        working-directory: desktop
+        shell: bash
+        run: npm install --no-package-lock --ignore-scripts=false
+      - name: Build Windows setup EXE
+        working-directory: desktop
+        shell: bash
+        run: npm run dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Upload downloadable PC installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoWatch-Alpha-Windows-Installer
+          path: desktop/release/*.exe
+          retention-days: 30
+      - name: Publish standalone installer
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "windows-alpha-${{ github.run_number }}" desktop/release/*.exe \
+            --title "共映 Alpha Windows 测试安装包 #${{ github.run_number }}" \
+            --notes "独立 Windows 安装包。界面内置，无需打开 Cloudflare 首页。云同步仍需联网，视频原文件不自动同步。Windows SmartScreen 可能提示未签名；测试版请勿删除任何既有本地收藏。" \
+            --prerelease --target "${{ github.sha }}"
