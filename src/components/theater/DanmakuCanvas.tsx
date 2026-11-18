@@ -45,22 +45,54 @@ export function DanmakuCanvas() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || size.w === 0) return;
-    // Cap canvas resolution on high-DPI phones to avoid excessive GPU fill cost.
+    if (!canvas || size.w === 0 || size.h === 0) return;
+    // Keep mobile output sharp enough without multiplying full-screen GPU work.
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    canvas.width = size.w * dpr;
-    canvas.height = size.h * dpr;
-    const ctx = canvas.getContext("2d");
+    canvas.width = Math.round(size.w * dpr);
+    canvas.height = Math.round(size.h * dpr);
+    const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
     let raf = 0;
-    let lastFrame = -Infinity;
     let lastTime = NaN;
+    let lastDrawAt = -Infinity;
+    const glyphCache = new Map<string, HTMLCanvasElement>();
+    const cacheMax = 120;
+    const glyphHeight = Math.max(lineHeight + 6, Math.ceil(display.fontSize * 1.6) + 4);
+
+    // Stroke/fill each caption ONCE into a small bitmap, then move that bitmap
+    // using drawImage. This avoids expensive per-frame Chinese text rasterization.
+    const glyph = (item: (typeof placed)[number]): HTMLCanvasElement | null => {
+      const key = item.color + "\\0" + item.text;
+      const cached = glyphCache.get(key);
+      if (cached) {
+        glyphCache.delete(key);
+        glyphCache.set(key, cached);
+        return cached;
+      }
+      const bitmap = document.createElement("canvas");
+      const logicalWidth = Math.ceil(item.width + 8);
+      // Avoid enormous allocations for malformed, extremely long comments.
+      if(logicalWidth <= 0 || logicalWidth > 4096)return null;
+      bitmap.width = Math.ceil(logicalWidth * dpr);
+      bitmap.height = Math.ceil(glyphHeight * dpr);
+      const pen = bitmap.getContext("2d");
+      if (!pen) return null;
+      pen.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pen.font = font;
+      pen.textBaseline = "top";
+      pen.lineJoin = "round";
+      pen.lineWidth = Math.max(2, display.fontSize / 8);
+      pen.strokeStyle = "rgba(0,0,0,0.8)";
+      pen.strokeText(item.text, 4, 3);
+      pen.fillStyle = item.color;
+      pen.fillText(item.text, 4, 3);
+      glyphCache.set(key,bitmap);
+      if (glyphCache.size > cacheMax) glyphCache.delete(glyphCache.keys().next().value!);
+      return bitmap;
+    };
+
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
-      // 30fps is sufficient for scrolling comments and halves the drawing load
-      // on phones with 60/90/120Hz displays.
-      if (now - lastFrame < 33) return;
-      lastFrame = now;
       const clock = getClock();
       if (!display.enabled || !clock) {
         if(!Number.isNaN(lastTime)) {
@@ -71,26 +103,37 @@ export function DanmakuCanvas() {
         return;
       }
       const t = clock.getTime() - (display.timeOffset ?? 0);
-      // Avoid redrawing unchanged paused frames.
+      // Reuse video time for smooth movement. At rest no redraw is needed.
       if (Math.abs(t - lastTime) < 0.005) return;
+      // Target approximately 60fps if the device can sustain it; rAF
+      // automatically slows when Android is under load.
+      if (now - lastDrawAt < 15) return;
+      lastDrawAt = now;
       lastTime = t;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, size.w, size.h);
-      ctx.font = font;
-      ctx.textBaseline = "top";
-      ctx.lineJoin = "round";
-      ctx.lineWidth = Math.max(2, display.fontSize / 8);
-      ctx.strokeStyle = "rgba(0,0,0,0.8)";
       ctx.globalAlpha = display.opacity;
       for (const { item, x } of visibleAt(placed, t, size.w, display.crossSeconds, maxWidth)) {
         const y = 4 + item.lane * lineHeight;
-        ctx.strokeText(item.text, x, y);
-        ctx.fillStyle = item.color;
-        ctx.fillText(item.text, x, y);
+        const bitmap = glyph(item);
+        if(bitmap) ctx.drawImage(bitmap, x - 4, y - 3, bitmap.width / dpr, bitmap.height / dpr);
+        else {
+          ctx.font = font;
+          ctx.textBaseline = "top";
+          ctx.lineJoin = "round";
+          ctx.lineWidth = Math.max(2, display.fontSize / 8);
+          ctx.strokeStyle = "rgba(0,0,0,0.8)";
+          ctx.strokeText(item.text,x,y);
+          ctx.fillStyle=item.color;
+          ctx.fillText(item.text,x,y);
+        }
       }
     };
     raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      glyphCache.clear();
+    };
   }, [placed, maxWidth, size.w, size.h, font, lineHeight, display.enabled, display.opacity, display.crossSeconds, display.fontSize, display.timeOffset]);
 
   return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />;
