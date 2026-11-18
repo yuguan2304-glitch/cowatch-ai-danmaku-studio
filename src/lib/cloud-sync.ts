@@ -3,7 +3,7 @@ import { useApp } from "./store";
 
 const STORE = "cowatch:cloud-sync:v1";
 export type SyncConfig = { url: string; anonKey: string; email: string; accessToken: string; refreshToken: string; expiresAt: number; userId: string };
-export const emptySyncConfig: SyncConfig = {url:import.meta.env.VITE_COWATCH_SUPABASE_URL||"",anonKey:import.meta.env.VITE_COWATCH_SUPABASE_PUBLISHABLE_KEY||"",email:"",accessToken:"",refreshToken:"",expiresAt:0,userId:""};
+export const emptySyncConfig: SyncConfig = {url:import.meta.env['VITE_COWATCH_SUPABASE_URL']||"",anonKey:import.meta.env['VITE_COWATCH_SUPABASE_PUBLISHABLE_KEY']||"",email:"",accessToken:"",refreshToken:"",expiresAt:0,userId:""};
 export function readSyncConfig(): SyncConfig {
   try { return {...emptySyncConfig,...JSON.parse(localStorage.getItem(STORE)||"{}")}; }
   catch { return {...emptySyncConfig}; }
