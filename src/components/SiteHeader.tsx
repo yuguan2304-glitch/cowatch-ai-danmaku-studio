@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Clapperboard, Info, Share2 } from "lucide-react";
+import { AppUpdateButton } from "@/components/AppUpdateButton";
 import { toast } from "sonner";
 import { openWelcome } from "@/components/WelcomeDialog";
 
@@ -49,6 +50,7 @@ export function SiteHeader() {
               {n.label}
             </Link>
           ))}
+          <AppUpdateButton/>
           <button type="button" onClick={openWelcome} className="flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1.5 text-muted-foreground hover:text-foreground" aria-label="使用须知">
             <Info className="size-4" />
             <span className="hidden sm:inline">须知</span>
