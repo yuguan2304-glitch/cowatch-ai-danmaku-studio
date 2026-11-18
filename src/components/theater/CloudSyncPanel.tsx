@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { clearSyncLogin, emptySyncConfig, readSyncConfig, sendSyncCode, syncNow, verifySyncCode, writeSyncConfig } from "@/lib/cloud-sync";
 import type { SyncConfig } from "@/lib/cloud-sync";
 import { toast } from "sonner";
+import { useApp } from "@/lib/store";
 
 export function CloudSyncPanel() {
   const [config,setConfig]=useState<SyncConfig>(()=>typeof window==="undefined"?emptySyncConfig:readSyncConfig());
@@ -13,6 +14,7 @@ export function CloudSyncPanel() {
   const [busy,setBusy]=useState(false);
   const lastRun=useRef(0);
   const signedIn=Boolean(config.userId&&config.refreshToken);
+  const settingsLoaded=useApp(st=>st.settingsLoaded);
   const change=(part:Partial<SyncConfig>)=>{
     const next={...config,...part};
     setConfig(next);writeSyncConfig(next);
@@ -28,7 +30,7 @@ export function CloudSyncPanel() {
     finally{setBusy(false);}
   };
   useEffect(()=>{
-    if(!active||!signedIn)return;
+    if(!active||!signedIn||!settingsLoaded)return;
     let running=false;
     const tick=async()=>{
       if(running || document.visibilityState!=="visible")return;
@@ -56,7 +58,7 @@ export function CloudSyncPanel() {
       document.removeEventListener("visibilitychange",visible);
       window.removeEventListener("cowatch:local-data-changed",changed);
     };
-  },[active,signedIn]);
+  },[active,signedIn,settingsLoaded]);
   const submitCode=async()=>{
     setBusy(true);
     try {const next=await verifySyncCode(config,code);setConfig(next);setCode("");setStatus("登录成功，可开启自动同步");toast.success("邮箱验证成功");}
