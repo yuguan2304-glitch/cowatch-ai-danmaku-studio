@@ -1,5 +1,6 @@
 import React from "react";
 import { Settings2 } from "lucide-react";
+import { AppUpdateButton } from "@/components/AppUpdateButton";
 import { createRoot } from "react-dom/client";
 import { Toaster } from "@/components/ui/sonner";
 import { Index } from "@/routes/index";
@@ -14,7 +15,7 @@ function App() {
         <a className="min-w-0 font-display text-lg font-bold text-primary sm:text-xl" href="/">
           🎬 共映 <span className="hidden text-xs text-muted-foreground sm:inline">CoWatch · AI弹幕放映室</span>
         </a>
-        <button type="button" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/80" onClick={() => window.dispatchEvent(new Event("cowatch:open-settings"))} aria-label="打开设置侧栏"><Settings2 className="size-4"/> 设置</button>
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2"><AppUpdateButton/><button type="button" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/80" onClick={() => window.dispatchEvent(new Event("cowatch:open-settings"))} aria-label="打开设置侧栏"><Settings2 className="size-4"/> 设置</button></div>
       </header>
       <Index />
       <Toaster position="top-center" richColors />
