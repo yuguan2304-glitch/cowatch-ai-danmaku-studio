@@ -57,6 +57,21 @@ jobs:
           mkdir -p android/app/src/main/assets
           cp -a dist/. android/app/src/main/assets/
           test -f android/app/src/main/assets/index.html
+      # Keep the debug signing key stable across Alpha rebuilds. This avoids
+      # Android signature mismatch on future upgrades of the safe-test package.
+      - name: Restore stable Alpha debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: cowatch-alpha-safe2026-debug-signing-v1
+      - name: Ensure stable debug signing key exists
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -s "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -alias androiddebugkey -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
+          fi
       - name: Build original online Android APK
         run: gradle -p android :app:assembleDebug --no-daemon --stacktrace
       - name: Preserve original installer
@@ -82,6 +97,6 @@ jobs:
             cowatch-android-alpha.apk \
             cowatch-android-alpha-preview.apk \
             --title "共映 Android 测试版 #${{ github.run_number }}" \
-            --notes "包含原始在线 APK 和单独安装的 Alpha 预览测试 APK（文件名含 alpha-preview）；后者内置网页界面，不需访问 workers.dev 即可启动，但 AI API 仍需网络。两个版本数据互不自动同步；请勿卸载旧版以免丢失收藏。调试签名仅供测试。" \
+            --notes "包含原始在线 APK 和单独安装的 Alpha 预览测试 APK（文件名含 alpha-preview）；安全测试 APK 更换独立包名 dev.cowatch.player.alpha.safe2026，可与旧 Alpha 并列安装，不覆盖原数据；使用缓存的稳定测试签名。内置网页界面，不需访问 workers.dev 即可启动，但 AI API 仍需网络。两个版本数据互不自动同步；请勿卸载旧版以免丢失收藏。调试签名仅供测试。" \
             --prerelease \
             --target "${{ github.sha }}"
