@@ -57,7 +57,7 @@ jobs:
           mkdir -p android/app/src/main/assets
           cp -a dist/. android/app/src/main/assets/
           test -f android/app/src/main/assets/index.html
-          printf '{"platform":"android","build":%s,"package":"dev.cowatch.player.alpha.stable2026"}' '${{ github.run_number }}' > android/app/src/main/assets/cowatch-build.json
+          printf '{"platform":"android","build":%s,"package":"dev.cowatch.player.alpha.autoupdate"}' '${{ github.run_number }}' > android/app/src/main/assets/cowatch-build.json
           test -f android/app/src/main/assets/cowatch-build.json
       # Keep the debug signing key stable across Alpha rebuilds. This avoids
       # Android signature mismatch on future upgrades of the safe-test package.
@@ -99,11 +99,12 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
           "$AAPT" dump badging cowatch-android-alpha.apk | grep "^package: name='dev.cowatch.player' "
-          "$AAPT" dump badging cowatch-android-alpha-preview.apk | grep "^package: name='dev.cowatch.player.alpha.stable2026' "
+          "$AAPT" dump badging cowatch-android-alpha-preview.apk | grep "^package: name='dev.cowatch.player.alpha.autoupdate' "
           "$SIGNER" verify --verbose --print-certs cowatch-android-alpha-preview.apk | grep -E 'Verified using|Signer #1 certificate SHA-256 digest'
           EXPECTED=$(keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sed -n 's/.*SHA256: //p' | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')
           ACTUAL=$("$SIGNER" verify --print-certs cowatch-android-alpha-preview.apk | sed -n 's/.*Signer #1 certificate SHA-256 digest: //p' | head -1)
           test -n "$EXPECTED" && test "$EXPECTED" = "$ACTUAL" || { echo "FAILED: APK did not use cached signing keystore"; exit 1; }
+          test "$ACTUAL" = "8bdf54e23b9bc0d7321b63ca6786d6d3abea005bed76e47ed436e875527dbe9c" || { echo "FAILED: signing certificate changed; refusing to publish an unupgradable APK"; exit 1; }
           echo "PASS: APK identity and signing match the restored keystore"
       - name: Upload both APKs
         uses: actions/upload-artifact@v4
@@ -122,6 +123,6 @@ jobs:
             cowatch-android-alpha.apk \
             cowatch-android-alpha-preview.apk \
             --title "共映 Android 测试版 #${{ github.run_number }}" \
-            --notes "包含原始在线 APK 和单独安装的 Alpha 预览测试 APK（文件名含 alpha-preview）；已验证 APK 实际安装包名。安全测试 APK 使用独立包名 dev.cowatch.player.alpha.stable2026，可与旧 Alpha 并列安装，不覆盖原数据；使用缓存的稳定测试签名；可用于后续同包名升级。内置网页界面，不需访问 workers.dev 即可启动，但 AI API 仍需网络。两个版本数据互不自动同步；请勿卸载旧版以免丢失收藏。调试签名仅供测试。" \
+            --notes "包含原始在线 APK 和单独安装的 Alpha 预览测试 APK（文件名含 alpha-preview）；已验证 APK 实际安装包名。安全测试 APK 使用独立包名 dev.cowatch.player.alpha.autoupdate，可与旧 Alpha 并列安装，不覆盖原数据；使用缓存的稳定测试签名；可用于后续同包名升级。内置网页界面，不需访问 workers.dev 即可启动，但 AI API 仍需网络。两个版本数据互不自动同步；请勿卸载旧版以免丢失收藏。调试签名仅供测试。" \
             --prerelease \
             --target "${{ github.sha }}"
