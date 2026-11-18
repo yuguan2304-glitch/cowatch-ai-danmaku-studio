@@ -297,6 +297,7 @@ public final class MainActivity extends Activity {
                                 || "cowatch-worldbook.txt".equals(name)
                                 || "cowatch-imported-worldbook.json".equals(name)
                                 || "cowatch-sync.json".equals(name)
+                                || "cowatch-subtitles.srt".equals(name)
                                 || (name.endsWith("-共映术语.json") && name.length()<=110
                                     && !name.contains("/") && !name.contains("\\\\")
                                     && !name.contains("..") && !name.contains("\\n") && !name.contains("\\r")))
