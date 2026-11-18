@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { clearSyncCode, generateSyncCode, readSyncCode, saveSyncCode, syncNow } from "@/lib/cloud-sync";
 import { toast } from "sonner";
 import { useApp } from "@/lib/store";
+import { exportDeviceTransfer } from "@/lib/device-transfer";
 
 export function CloudSyncPanel() {
   const [code,setCode]=useState(()=>readSyncCode());
@@ -12,6 +13,9 @@ export function CloudSyncPanel() {
   const [status,setStatus]=useState("尚未连接云端");
   const [busy,setBusy]=useState(false);
   const settingsLoaded=useApp(st=>st.settingsLoaded);
+  const [localCounts,setLocalCounts]=useState<{history:number;screenings:number;presets:number;missingVideos:number}|null>(null);
+  const refreshCounts=async()=>{try{const r=await exportDeviceTransfer();setLocalCounts(r);}catch{setLocalCounts(null);}};
+  useEffect(()=>{void refreshCounts();const onChanged=()=>void refreshCounts();window.addEventListener("cowatch:records-updated",onChanged);window.addEventListener("cowatch:local-data-changed",onChanged);return()=>{window.removeEventListener("cowatch:records-updated",onChanged);window.removeEventListener("cowatch:local-data-changed",onChanged);};},[]);
   const paired=Boolean(code);
   const setup=(value:string)=>{
     try{
@@ -26,9 +30,13 @@ export function CloudSyncPanel() {
     setBusy(true);
     try{
       const result=await syncNow(code);
-      setStatus("同步成功 · "+new Date().toLocaleTimeString("zh-CN")+
-        (result.pulled?" · 已合并另一台设备的数据":"")+
-        (result.pushed?" · 已保存至云端":" · 已是最新"));
+      await refreshCounts();
+      setStatus("云端连接成功 · "+new Date().toLocaleTimeString("zh-CN")+
+        " · 本设备历史 "+result.history+" 条、收藏 "+result.screenings+" 部、预设 "+result.presets+" 组"+
+        (result.pulled?" · 已拉取合并":"")+
+        (result.pushed?" · 已上传元数据":" · 云端版本未变化")+
+        "。视频文件本身没有上传。"+
+        (!result.history&&!result.screenings?" 当前没有可同步的已保存记录，请先在「我的放映室」收藏视频或保存生成历史。":""));
     }catch(e){setStatus("同步失败："+(e instanceof Error?e.message:String(e)));}
     finally{setBusy(false);}
   };
@@ -40,8 +48,11 @@ export function CloudSyncPanel() {
       running=true;
       try{
         const result=await syncNow(readSyncCode());
-        setStatus("自动同步成功 · "+new Date().toLocaleTimeString("zh-CN")+
-          (result.pushed?" · 已上传":""));
+        setLocalCounts({history:result.history,screenings:result.screenings,presets:result.presets,missingVideos:result.missingVideos});
+        setStatus("云端同步检查完成 · "+new Date().toLocaleTimeString("zh-CN")+
+          " · 收藏 "+result.screenings+" 部，历史 "+result.history+" 条"+
+          (result.pushed?"（已上传元数据）":"（没有需要上传的变化）")+
+          "；视频原文件不在同步范围内。");
       }catch(e){setStatus("自动同步失败："+(e instanceof Error?e.message:String(e)));}
       finally{running=false;}
     };
@@ -65,7 +76,14 @@ export function CloudSyncPanel() {
   return <details className="panel space-y-2 p-3" id="cowatch-cloud-sync">
     <summary className="cursor-pointer font-bold">☁️ 多设备自动同步 · Cloudflare D1</summary>
     <div className="space-y-2 pt-2 text-sm">
-      <p className="text-xs text-muted-foreground">不用 Lovable、Supabase 或邮箱账号。PC 与手机输入同一串随机配对码，就能同步弹幕、字幕、观众设定和收藏记录。视频原文件及 API 密钥不上传，数据在本机加密后再上传。</p>
+      <p className="text-xs text-muted-foreground">不用 Lovable、Supabase 或邮箱账号。PC 与手机输入同一串随机配对码，可以同步已保存的生成历史、弹幕、字幕、观众设定和收藏记录。</p>
+      <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-xs space-y-1">
+        <p className="font-bold">注意：目前不支持跨设备自动传输视频文件。</p>
+        <p>同步成功指云端元数据读写成功，不代表新设备已有可以播放的视频。视频需在两台设备分别导入，并在「我的放映室」点「补充本地视频」关联；不会因此重新生成 AI 弹幕。</p>
+        <p>正在播放但没有收藏的视频，也不算已保存的放映记录。请先在「我的放映室」保存视频，或确认生成历史已保存。</p>
+      </div>
+      <p className="text-xs">本机已保存：{localCounts? `历史 ${localCounts.history} 条 · 收藏 ${localCounts.screenings} 部 · 观众预设 ${localCounts.presets} 组`:"正在读取…"}。</p>
+      <Button type="button" size="sm" variant="outline" onClick={()=>void refreshCounts()}>重新检查本机数据</Button>
       {!paired?<div className="space-y-2">
         <Button size="sm" onClick={()=>setup(generateSyncCode())}>创建我的同步空间</Button>
         <label className="block">已有同步码？在这里粘贴
