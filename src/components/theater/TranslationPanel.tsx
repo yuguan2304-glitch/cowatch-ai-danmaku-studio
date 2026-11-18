@@ -262,6 +262,7 @@ export function TranslationPanel(){
      </>}
      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={cloudSample} disabled={busy} onChange={e=>setCloudSample(e.target.checked)}/>先测试视频前 30 秒（可能产生一次 API 费用）</label>
      <Button size="sm" disabled={busy||source.kind!=="file"} onClick={()=>void extractAudioSubtitles()}>{cloudSample?"测试识别前30秒":"转录整段视频"}</Button>
+     {source.kind!=="file" && <p role="status" className="text-xs text-amber-500">⚠️ 按钮不可点击：请先关闭设置，在播放器上方选择「打开本地视频」并等待视频加载成功。在线视频链接不支持直接提取音轨。</p>}
      <p className="text-xs text-muted-foreground">整段转录时，大视频会在手机本地提取压缩音频，再分段传给转录 API；无需下载 Whisper 本地模型。</p>
    </div>
    <details className="rounded border border-border bg-background/60 p-2 text-xs space-y-2">
