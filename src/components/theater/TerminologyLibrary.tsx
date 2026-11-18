@@ -1,11 +1,11 @@
-import { useRef,useState } from "react";
+import { useEffect,useRef,useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadText } from "@/lib/export";
-import {loadTermGroups,saveTermGroups,selectedTermGroupId,saveSelectedTermGroupId,parseTermFile,composeTerminology,uniqueTerms,newTerm,newTermGroup,type TermGroup} from "@/lib/translation-terms";
+import {loadTermGroups,saveTermGroups,selectedTermGroupId,saveSelectedTermGroupId,parseTermFile,uniqueTerms,newTerm,newTermGroup,type TermGroup} from "@/lib/translation-terms";
 
-export function TerminologyLibrary({legacy,onChange}:{legacy:string;onChange:(text:string)=>void}){
+export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
  const [groups,setGroups]=useState<TermGroup[]>(loadTermGroups);
  const [active,setActive]=useState<string>(selectedTermGroupId);
  const [newCategory,setNewCategory]=useState("");
@@ -13,16 +13,18 @@ export function TerminologyLibrary({legacy,onChange}:{legacy:string;onChange:(te
  const [importMode,setImportMode]=useState<"merge"|"replace">("merge");
  const fileRef=useRef<HTMLInputElement>(null);
  const current=groups.find(g=>g.id===active);
+ const termText=(group:TermGroup|undefined)=>group?.entries.map(e=>e.source+" = "+e.target+(e.note?"（"+e.note+"）":"")).join("\\n")??"";
+ useEffect(()=>{onChange(termText(groups.find(g=>g.id===active)));},[]);
  const commit=(next:TermGroup[],chosen=active)=>{
   try{
    saveTermGroups(next);saveSelectedTermGroupId(chosen);
    setGroups(next);setActive(chosen);
-   onChange(composeTerminology(next.find(g=>g.id===chosen),legacy));
+   onChange(termText(next.find(g=>g.id===chosen)));
   }catch(e){toast.error((e as Error).message);}
  };
  const choose=(id:string)=>{
   saveSelectedTermGroupId(id);setActive(id);
-  onChange(composeTerminology(groups.find(g=>g.id===id),legacy));
+  onChange(termText(groups.find(g=>g.id===id)));
  };
  const addCategory=()=>{
   const name=newCategory.trim().slice(0,80);
