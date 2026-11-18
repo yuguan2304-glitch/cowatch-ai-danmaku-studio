@@ -5,6 +5,7 @@ import { clearSyncCode, generateSyncCode, readSyncCode, saveSyncCode, syncNow } 
 import { toast } from "sonner";
 import { useApp } from "@/lib/store";
 import { exportDeviceTransfer } from "@/lib/device-transfer";
+import { saveHistory } from "@/lib/ai/generator";
 
 export function CloudSyncPanel() {
   const [code,setCode]=useState(()=>readSyncCode());
@@ -29,6 +30,8 @@ export function CloudSyncPanel() {
     if(busy||!code)return;
     setBusy(true);
     try{
+      const state=useApp.getState();
+      if(state.danmaku.length && !state.demo)await saveHistory();
       const result=await syncNow(code);
       await refreshCounts();
       setStatus("云端连接成功 · "+new Date().toLocaleTimeString("zh-CN")+
