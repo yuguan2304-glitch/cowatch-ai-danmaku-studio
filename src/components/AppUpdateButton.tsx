@@ -11,6 +11,7 @@ function updater():NativeUpdater|undefined{
 export function AppUpdateButton(){
   const [installed,setInstalled]=useState<number|null>(null);
   const [available,setAvailable]=useState<Update|null>(null);
+  const [autoWeb,setAutoWeb]=useState(false);
   const [checking,setChecking]=useState(false);
   async function check(showFeedback:boolean){
     if(checking)return;
@@ -21,6 +22,21 @@ export function AppUpdateButton(){
       const build=await buildResponse.json() as {platform?:string;build?:number;package?:string};
       if(build.platform!=="android"||build.package!=="dev.cowatch.player.alpha.autoupdate"||!Number.isInteger(build.build))return;
       setInstalled(build.build!);
+      // Native Alpha 89+ keeps the same appassets origin and loads web features
+      // directly from first-party Cloudflare assets. New APKs are only needed
+      // when a newer native Android shell becomes mandatory.
+      try{
+        const policyRes=await fetch("/cowatch-native-policy.json",{cache:"no-store"});
+        if(policyRes.ok){
+          const policy=await policyRes.json() as {minNativeBuild?:number;webUpdates?:boolean};
+          if(policy.webUpdates===true&&Number.isInteger(policy.minNativeBuild)&&build.build!>=policy.minNativeBuild!){
+            setAutoWeb(true);setAvailable(null);
+            if(showFeedback)toast.success("网页功能已采用自动更新；点「刷新功能」即可重新加载最新版，无需安装 APK");
+            return;
+          }
+        }
+      }catch{/* Older APKs may not bundle the web-update policy. */}
+      setAutoWeb(false);
       const response=await fetch(LATEST,{cache:"no-store",headers:{"Accept":"application/vnd.github+json"}});
       if(!response.ok)throw Error("暂时无法连接 GitHub 查询更新");
       const releases=await response.json() as Array<{tag_name:string;assets:Array<{name:string;browser_download_url:string}>}>;
@@ -54,7 +70,9 @@ export function AppUpdateButton(){
     }
   };
   return <div className="flex items-center gap-1">
-    {available?<button type="button" onClick={install} title={"版本 "+installed+" → "+available.build+"；更新后数据保留"} className="flex items-center gap-1 rounded-md bg-primary/15 px-2 py-1.5 text-xs font-semibold text-primary">
+    {autoWeb?<button type="button" onClick={()=>window.location.reload()} title={"共映 Alpha "+installed+" · 网页功能在线获取新版；离线时回退到内置版本"} className="flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1.5 text-xs text-primary">
+      <DownloadCloud className="size-4"/> 刷新功能（免安装）
+    </button>:available?<button type="button" onClick={install} title={"版本 "+installed+" → "+available.build+"；更新后数据保留"} className="flex items-center gap-1 rounded-md bg-primary/15 px-2 py-1.5 text-xs font-semibold text-primary">
       <DownloadCloud className="size-4"/> 更新 {available.build}
     </button>:<button type="button" onClick={()=>void check(true)} disabled={checking} title={"当前安卓 Alpha "+installed+" · 点击检查更新"} className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-muted-foreground">
       <DownloadCloud className="size-4"/>{checking?"检查…":"检查更新"}
