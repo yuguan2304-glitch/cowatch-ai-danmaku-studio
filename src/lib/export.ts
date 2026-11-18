@@ -122,7 +122,7 @@ export function downloadText(filename: string, content: string, mime: string) {
   // Browser users continue to use the normal blob download path.
   const nativeExport = (window as Window & { CoWatchExport?: { postMessage: (data: string) => void } }).CoWatchExport;
   const allowed = ["cowatch.json","cowatch.xml","cowatch-worldbook.txt","cowatch-imported-worldbook.json","cowatch-sync.json"].includes(filename)
-    || (/^[^/\\\\:*?"<>|\\r\\n]{1,100}-共映术语\\.json$/u.test(filename) && mime === "application/json");
+    || (filename.endsWith("-共映术语.json") && filename.length <= 110 && !/[\\/:*?"<>|\r\n]/.test(filename) && mime === "application/json");
   if (nativeExport && allowed) {
     nativeExport.postMessage(JSON.stringify({ filename, mime, content }));
     return;
