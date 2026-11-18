@@ -79,7 +79,7 @@ export async function transcribeLocalVideo(opts: {
     ensureActive();
     if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error("无法获取视频时长");
     const endAt = Math.min(video.duration, opts.maxSeconds);
-    opts.onProgress("准备本地英语语音模型…首次可能需要下载数十 MB 到上百 MB 文件");
+    opts.onProgress("准备本地多语言语音模型…首次可能需要下载数十 MB 到上百 MB 文件");
     await sendWorker({kind:"load",modelHost:opts.modelHost}, "ready");
     ensureActive();
 
@@ -102,10 +102,33 @@ export async function transcribeLocalVideo(opts: {
       samples.length = 0;
       sampleSize = 0;
       const pcm = resample(collected, context.sampleRate);
+      // Whisper tiny may hallucinate dialogue when the source contains silence.
+      // Skip nearly silent chunks instead of asking a language model to invent text.
+      let energy=0, peak=0;
+      for (let i=0;i<pcm.length;i++){const x=pcm[i]!;energy+=x*x;peak=Math.max(peak,Math.abs(x));}
+      const rms=Math.sqrt(energy/Math.max(1,pcm.length));
+      if (rms<0.0015 && peak<0.015) {
+        opts.onProgress("这段音频几乎无声，已跳过以避免虚构字幕");
+        chunkStart=end;
+        inProgress=false;
+        ensureActive();
+        if (end>=endAt-0.15) finished=true;
+        else await video.play();
+        return;
+      }
       opts.onProgress("本地识别中：" + Math.round(chunkStart) + "–" + Math.round(end) + " 秒；无需 API 额度");
       const id = ++seq;
       const data = await sendWorker<{cues: Cue[]}>({kind:"recognize",id,data:pcm,offset:chunkStart},"result",id);
-      cues.push(...(data.cues || []).filter(c=>c.text.trim() && c.start < endAt));
+      const incoming=(data.cues||[]).filter(c=>c.text.trim()&&c.start<endAt);
+      const normalize=(t:string)=>t.toLowerCase().replace(/[\\p{P}\\p{S}\\s]/gu,"");
+      const all=[...cues,...incoming].filter(c=>normalize(c.text).length>=12);
+      const seen=new Map<string,number>();
+      for(const cue of all){const k=normalize(cue.text);seen.set(k,(seen.get(k)||0)+1);}
+      const maxRepeats=Math.max(0,...seen.values());
+      if(all.length>=8&&maxRepeats>=6&&maxRepeats/all.length>=0.65){
+        throw new Error("检测到大量完全相同的台词（本地小模型语音幻觉），已停止识别，避免用虚构字幕覆盖正常内容。建议用 Groq 或 Cloudflare 做质量对照。");
+      }
+      cues.push(...incoming);
       opts.onPartial?.([...cues]);
       chunkStart = end;
       inProgress = false;
