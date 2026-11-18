@@ -111,6 +111,46 @@ export function TranslationPanel(){
  useEffect(()=>{setCommentTranslations({});abort.current?.abort();},[target,session]);
  useEffect(()=>{const timer=window.setInterval(()=>setTime(getClock()?.getTime()??0),200);return()=>{clearInterval(timer);abort.current?.abort();};},[]);
  const cacheId=(kind:string,text:string)=>JSON.stringify([kind,target,service,service==="custom"?translationUrl:service==="shared"?provider.baseUrl:"google",service==="custom"?translationModel:service==="shared"?provider.model:"nmt",service==="google"?"":effectiveGlossary,text]);
+ // Read-only recovery of older translation cache entries after switching AI models.
+ // Match the exact source sentence AND target language; never guess across conflicting translations.
+ const recoverLegacyTranslations=()=>{
+   if(!cues.length){toast.info("请先恢复原来的英文字幕");return;}
+   const lookup=new Map<string,Set<string>>();
+   let scanned=0;
+   try{
+     for(let i=0;i<localStorage.length;i++){
+       const name=localStorage.key(i);
+       if(!name?.startsWith("cowatch:translation:"))continue;
+       let info:unknown;
+       try{info=JSON.parse(name.slice("cowatch:translation:".length));}catch{continue;}
+       if(!Array.isArray(info)||info.length!==7||info[0]!=="cues"||info[1]!==target||typeof info[6]!=="string")continue;
+       const value=localStorage.getItem(name);
+       if(!value?.trim())continue;
+       const sentence=info[6];
+       if(!lookup.has(sentence))lookup.set(sentence,new Set());
+       lookup.get(sentence)!.add(value);
+       scanned++;
+     }
+   }catch{toast.error("无法读取旧译文缓存；请不要清除《共映》的应用数据");return;}
+   const restored:Record<number,string>={};
+   let ambiguous=0;
+   cues.forEach((cue,index)=>{
+     if(translated[index]?.trim())return;
+     const candidates=lookup.get(cue.text);
+     if(candidates?.size===1)restored[index]=[...candidates][0]!;
+     else if(candidates && candidates.size>1)ambiguous++;
+   });
+   const count=Object.keys(restored).length;
+   if(!count){toast.info(scanned?"找到旧缓存，但没有可安全匹配的缺失译文（存在 "+ambiguous+" 条有多个译法）":"没有找到相同目标语言的旧译文缓存");return;}
+   if(!confirm("已在本机找到 "+count+" 条原文完全一致、且译文唯一的旧缓存。"+(ambiguous?"另外 "+ambiguous+" 条存在不同译法，将跳过。":"")+"恢复时不会调用任何翻译 API，也不会覆盖现有译文。继续吗？"))return;
+   // Explicit recovery copies the chosen text to the present model's lookup key.
+   // Preserve original cache keys, allowing later recovery if settings change again.
+   for(const [index,text] of Object.entries(restored)){
+     writeCache(cacheId("cues",cues[Number(index)]!.text),text);
+   }
+   mergeTranslated(restored);
+   toast.success("已免费找回 "+count+" 条中文译文；建议立即导出双语 SRT 备份");
+ };
  const previousCuesRef=useRef<Cue[]>([]);
  const previousTranslationsRef=useRef<Record<number,string>>({});
  const previousConfigRef=useRef("");
@@ -491,7 +531,7 @@ export function TranslationPanel(){
    </div>
    <p className="text-muted-foreground">只提交选中字幕的原文，不发送整段音频。调用付费翻译 API 前会再次确认。已翻译的选中句也可以重新翻译。</p>
  </div>}
- <div className="flex flex-wrap gap-2">{translationMode==="all"&&<Button size="sm" disabled={busy||!cues.length} onClick={()=>void run("cues")}>一键补齐视频翻译（{cues.length} 段）</Button>}<Button size="sm" disabled={busy||!comments.length} onClick={()=>void run("comments")}>翻译弹幕文本</Button>{busy&&<Button size="sm" variant="outline" onClick={()=>abort.current?.abort()}>取消</Button>}<Button size="sm" variant="outline" disabled={!source.file||busy} onClick={()=>void restoreCachedSubtitles()}>恢复已缓存的转录（免费）</Button><Button size="sm" variant="outline" disabled={!cues.length} onClick={exportSrt}>导出 SRT</Button></div>
+ <div className="flex flex-wrap gap-2">{translationMode==="all"&&<Button size="sm" disabled={busy||!cues.length} onClick={()=>void run("cues")}>一键补齐视频翻译（{cues.length} 段）</Button>}<Button size="sm" disabled={busy||!comments.length} onClick={()=>void run("comments")}>翻译弹幕文本</Button>{busy&&<Button size="sm" variant="outline" onClick={()=>abort.current?.abort()}>取消</Button>}<Button size="sm" variant="outline" disabled={!source.file||busy} onClick={()=>void restoreCachedSubtitles()}>恢复已缓存的转录（免费）</Button><Button size="sm" variant="outline" disabled={!cues.length||busy} onClick={recoverLegacyTranslations}>找回旧模型译文（免费）</Button><Button size="sm" variant="outline" disabled={!cues.length} onClick={exportSrt}>导出 SRT</Button></div>
  {!cues.length&&<p className="rounded border border-border bg-secondary/40 p-2 text-sm">尚无带时间戳的视频字幕。请先在播放器上方「导入字幕 SRT/VTT」，或使用「AI 转录音轨」生成字幕。没有字幕时不能可靠地翻译音轨。</p>}
  <label className="block text-sm">视频字幕显示 <select className="rounded border bg-background p-1" value={mode} onChange={e=>setMode(e.target.value as typeof mode)}><option value="both">双语</option><option value="original">原文</option><option value="translated">译文</option><option value="off">关闭</option></select></label>
  <div className="grid gap-3 rounded border border-border bg-secondary/20 p-3 text-sm sm:grid-cols-2">
