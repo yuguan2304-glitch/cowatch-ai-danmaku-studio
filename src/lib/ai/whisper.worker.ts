@@ -30,7 +30,7 @@ let recognizer: Recognizer | null = null;
 const createPipeline = pipeline as unknown as (task: string, model: string, options: Record<string, unknown>) => Promise<Recognizer>;
 
 type WorkerRequest =
-  | { kind: "load"; modelHost?: string }
+  | { kind: "load"; modelHost?: string; modelSize?: "tiny" | "base" }
   | { kind: "recognize"; id: number; data: Float32Array; offset: number };
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
@@ -47,7 +47,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         // Transformers.js appends the resource filename itself; do NOT include {file} here.\n        env.remotePathTemplate = "{model}/resolve/{revision}/";
       }
       self.postMessage({kind: "progress", text: "首次使用：正在下载并缓存本地多语言语音模型（可能消耗较多流量）…"});
-      recognizer = await createPipeline("automatic-speech-recognition", "onnx-community/whisper-tiny", {
+      const chosenModel=data.kind==="load"&&data.modelSize==="tiny"?"tiny":"base";
+      self.postMessage({kind:"progress",text:"正在准备 Whisper "+chosenModel+" 多语言模型。若已缓存，将优先读取本机文件…"});
+      recognizer = await createPipeline("automatic-speech-recognition", "onnx-community/whisper-"+chosenModel, {
         device: "wasm",
         dtype: "q8",
         progress_callback: (item: {status?: string; progress?: number}) => {
