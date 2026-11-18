@@ -55,6 +55,10 @@ async function sync(req:Request,env:Env):Promise<Response>{
     const expected=Number(incoming.expectedVersion);
     let changes=0;
     if(expected===0) {
+      // Soft global free-tier safety guard for first-time pairings, not a billing upgrade.
+      const usage=await env.SYNC_DB.prepare("SELECT COUNT(*) AS total,COALESCE(SUM(LENGTH(ciphertext)),0) AS bytes FROM sync_vaults").bind().first<{total:number;bytes:number}>();
+      if((usage?.bytes||0)>=50_000_000 || (usage?.total||0)>=200)
+        return json(req,{error:"同步存储已达到共映 Alpha 的免费保护上限，请联系管理员；不会自动产生付费"},507);
       const out=await env.SYNC_DB.prepare("INSERT INTO sync_vaults(owner_hash,ciphertext,version,updated_at) VALUES(?,?,1,unixepoch()) ON CONFLICT(owner_hash) DO NOTHING").bind(owner,incoming.ciphertext).run();
       changes=out.meta?.changes||0;
     } else {
