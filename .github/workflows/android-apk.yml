@@ -123,6 +123,6 @@ jobs:
             cowatch-android-alpha.apk \
             cowatch-android-alpha-preview.apk \
             --title "共映 Android 测试版 #${{ github.run_number }}" \
-            --notes "包含原始在线 APK 和单独安装的 Alpha 预览测试 APK（文件名含 alpha-preview）；已验证 APK 实际安装包名。安全测试 APK 使用独立包名 dev.cowatch.player.alpha.autoupdate，可与旧 Alpha 并列安装，不覆盖原数据；使用缓存的稳定测试签名；可用于后续同包名升级。内置网页界面，不需访问 workers.dev 即可启动，但 AI API 仍需网络。两个版本数据互不自动同步；请勿卸载旧版以免丢失收藏。调试签名仅供测试。" \
+            --notes "包含原始在线 APK 和单独安装的 Alpha 预览测试 APK（文件名含 alpha-preview）；已验证 APK 实际安装包名。安全测试 APK 使用独立包名 dev.cowatch.player.alpha.autoupdate，可与旧 Alpha 并列安装，不覆盖原数据；使用硬性锁定的更新签名；未来包名和证书不变，可在共映里检查更新并确认安装。内置网页界面，不需访问 workers.dev 即可启动，但 AI API 仍需网络。两个版本数据互不自动同步；请勿卸载旧版以免丢失收藏。调试签名仅供测试。" \
             --prerelease \
             --target "${{ github.sha }}"
