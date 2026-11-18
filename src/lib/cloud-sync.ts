@@ -1,4 +1,5 @@
 import { exportDeviceTransfer, importDeviceTransfer } from "./device-transfer";
+import { useApp } from "./store";
 
 const STORE = "cowatch:cloud-sync:v1";
 export type SyncConfig = { url: string; anonKey: string; email: string; accessToken: string; refreshToken: string; expiresAt: number; userId: string };
