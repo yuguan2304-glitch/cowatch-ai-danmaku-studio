@@ -15,6 +15,12 @@ on:
     branches: [main]
     paths:
       - 'android/**'
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'bun.lock'
+      - 'vite.config.ts'
       - '.github/workflows/android-apk.yml'
   workflow_dispatch:
 
