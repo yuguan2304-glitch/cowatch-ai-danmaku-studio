@@ -45,8 +45,8 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         }
         env.remoteHost = parsed.origin + "/";
       }
-      self.postMessage({kind: "progress", text: "首次使用：正在下载并缓存本地英语语音模型（可能消耗较多流量）…"});
-      recognizer = await createPipeline("automatic-speech-recognition", "onnx-community/whisper-tiny.en", {
+      self.postMessage({kind: "progress", text: "首次使用：正在下载并缓存本地多语言语音模型（可能消耗较多流量）…"});
+      recognizer = await createPipeline("automatic-speech-recognition", "onnx-community/whisper-tiny", {
         device: "wasm",
         dtype: "q8",
         progress_callback: (item: {status?: string; progress?: number}) => {
