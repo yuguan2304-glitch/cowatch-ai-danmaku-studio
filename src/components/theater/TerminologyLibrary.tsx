@@ -3,11 +3,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadText } from "@/lib/export";
-import {loadTermGroups,saveTermGroups,selectedTermGroupId,saveSelectedTermGroupId,parseTermFile,uniqueTerms,newTerm,newTermGroup,type TermGroup} from "@/lib/translation-terms";
+import {loadTermGroups,saveTermGroups,selectedTermGroupId,saveSelectedTermGroupId,enabledTermGroupId,saveEnabledTermGroupId,parseTermFile,uniqueTerms,newTerm,newTermGroup,type TermGroup} from "@/lib/translation-terms";
 
 export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
  const [groups,setGroups]=useState<TermGroup[]>(loadTermGroups);
  const [active,setActive]=useState<string>(selectedTermGroupId);
+ const [enabled,setEnabled]=useState<string>(enabledTermGroupId);
  const [newCategory,setNewCategory]=useState("");
  const [source,setSource]=useState(""),[target,setTarget]=useState(""),[note,setNote]=useState("");
  const [importMode,setImportMode]=useState<"merge"|"replace">("merge");
@@ -15,18 +16,28 @@ export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
  const [pasteOpen,setPasteOpen]=useState(false);
  const fileRef=useRef<HTMLInputElement>(null);
  const current=groups.find(g=>g.id===active);
- const termText=(group:TermGroup|undefined)=>group?.entries.map(e=>e.source+" = "+e.target+(e.note?"（"+e.note+"）":"")).join("\\n")??"";
- useEffect(()=>{onChange(termText(groups.find(g=>g.id===active)));},[]);
+ const termText=(group:TermGroup|undefined)=>group?.entries.map(e=>e.source+" = "+e.target+(e.note?"（"+e.note+"）":"")).join("\n")??"";
+ useEffect(()=>{onChange(termText(groups.find(g=>g.id===enabled)));},[]);
  const commit=(next:TermGroup[],chosen=active)=>{
   try{
    saveTermGroups(next);saveSelectedTermGroupId(chosen);
    setGroups(next);setActive(chosen);
-   onChange(termText(next.find(g=>g.id===chosen)));
+   if(enabled===chosen||!next.some(g=>g.id===enabled)){
+    const nextEnabled=next.some(g=>g.id===enabled)?enabled:"";
+    if(nextEnabled!==enabled){saveEnabledTermGroupId("");setEnabled("");}
+    onChange(termText(next.find(g=>g.id===nextEnabled)));
+   }
   }catch(e){toast.error((e as Error).message);}
  };
  const choose=(id:string)=>{
   saveSelectedTermGroupId(id);setActive(id);
-  onChange(termText(groups.find(g=>g.id===id)));
+  // Only selects an import/edit destination; does not enable this group.
+ };
+ const toggleEnabled=(id:string)=>{
+  const next=enabled===id?"":id;
+  saveEnabledTermGroupId(next);setEnabled(next);
+  onChange(termText(groups.find(g=>g.id===next)));
+  toast.success(next?"已启用「"+groups.find(g=>g.id===next)?.name+"」术语":"已停用分类术语");
  };
  const addCategory=()=>{
   const name=newCategory.trim().slice(0,80);
@@ -50,7 +61,7 @@ export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
    if(importMode==="replace"&&!confirm("用这 "+imported.length+" 条术语替换当前「"+current.name+"」分类？其他分类不受影响。"))return;
    const entries=importMode==="replace"?imported:uniqueTerms([...imported,...current.entries]);
    updateGroup(entries);
-   toast.success("已导入 "+imported.length+" 条；当前分类共 "+entries.length+" 条");
+   toast.success("已将 "+imported.length+" 条术语保存到「"+current.name+"」；需启用后才用于翻译");
  };
  const readFile=async(file:File|undefined)=>{
   if(!file||!current)return;
@@ -67,15 +78,22 @@ export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
  };
  const exportGroup=()=>{
   if(!current)return;
-  downloadText("cowatch-imported-worldbook.json",JSON.stringify({format:"cowatch-terms-v1",name:current.name,entries:current.entries},null,2),"application/json");
+  downloadText(current.name.replace(/[\\/:*?"<>|]/g,"_")+"-共映术语.json",JSON.stringify({format:"cowatch-terms-v1",name:current.name,entries:current.entries},null,2),"application/json");
  };
  return <details className="rounded-lg border border-border p-3 text-sm">
   <summary className="cursor-pointer font-semibold">📚 分类术语库 · {groups.length} 类（导入、编辑、保存、切换）</summary>
   <div className="space-y-3 pt-3">
-   <p className="text-xs text-muted-foreground">按不同圈子分别保存人名、CP、专有名词。一次只启用一个分类；与上方手填术语一起用于 AI 翻译。术语保存在当前设备，不会随着云端同步，不含 API 密钥。</p>
-   <label className="block text-xs">当前启用分类
+   <p className="text-xs text-muted-foreground">先选目标分组并直接导入术语，保存后再按需启用。切换管理分组不会改变当前翻译用的术语。</p>
+   <div className="rounded-lg border border-primary/40 bg-secondary/20 p-2 space-y-2">
+    <p className="text-xs font-semibold">当前翻译启用：{groups.find(g=>g.id===enabled)?.name??"无分类术语"}</p>
+    <div className="flex flex-wrap gap-2">
+     {groups.map(g=><Button key={g.id} type="button" size="sm" variant={enabled===g.id?"default":"outline"} onClick={()=>toggleEnabled(g.id)}>{enabled===g.id?"✓ 已启用 ":"启用 "}{g.name} · {g.entries.length} 条</Button>)}
+     {enabled&&<Button type="button" size="sm" variant="ghost" onClick={()=>toggleEnabled(enabled)}>停用分类术语</Button>}
+    </div>
+   </div>
+   <label className="block text-xs font-semibold">导入／管理的目标分组（不影响启用状态）
     <select value={active} onChange={e=>choose(e.target.value)} className="w-full rounded border bg-background p-2">
-     <option value="">不使用分类术语</option>
+     <option value="">选择现有分组</option>
      {groups.map(g=><option value={g.id} key={g.id}>{g.name}（{g.entries.length} 条）</option>)}
     </select>
    </label>
@@ -84,18 +102,13 @@ export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
     <Button type="button" size="sm" onClick={addCategory}>新建</Button>
    </div>
    {current&&<>
+    <div className="flex items-center justify-between gap-2 rounded border border-border p-2">
+      <span className="text-xs font-medium">导入目标：{current.name} · 已保存 {current.entries.length} 条</span>
+      <Button size="sm" type="button" variant={enabled===active?"default":"outline"} onClick={()=>toggleEnabled(active)}>{enabled===active?"停用":"启用此组"}</Button>
+    </div>
     <div className="flex flex-wrap gap-2">
      <Button type="button" size="sm" variant="outline" onClick={exportGroup}>导出此分类 JSON</Button>
      <Button type="button" size="sm" variant="outline" onClick={()=>{if(confirm("删除「"+current.name+"」分类及其中全部术语？"))commit(groups.filter(g=>g.id!==active),"");}}>删除分类</Button>
-    </div>
-    <div className="space-y-2 rounded border border-border p-2">
-     <p className="text-xs font-medium">添加术语</p>
-     <div className="grid grid-cols-2 gap-2">
-      <Input value={source} onChange={e=>setSource(e.target.value)} placeholder="原词，如 Ender Pearl"/>
-      <Input value={target} onChange={e=>setTarget(e.target.value)} placeholder="译名，如 末影珍珠"/>
-     </div>
-     <Input value={note} onChange={e=>setNote(e.target.value)} placeholder="备注（可选）：语境、角色、习惯用法"/>
-     <Button size="sm" type="button" onClick={addEntry}>添加到 {current.name}</Button>
     </div>
     <div className="space-y-2">
      <p className="text-xs font-medium">导入术语：支持 JSON / TXT / MD / CSV / TSV</p>
@@ -113,7 +126,18 @@ export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
        <Button type="button" size="sm" onClick={readPasted}>导入粘贴的术语</Button>
      </div>}
     </div>
-    <div className="max-h-72 space-y-2 overflow-y-auto">
+    <details className="space-y-2 rounded border border-border p-2">
+     <summary className="cursor-pointer text-xs font-medium">手动添加术语</summary>
+     <div className="grid grid-cols-2 gap-2">
+      <Input value={source} onChange={e=>setSource(e.target.value)} placeholder="原词，如 Ender Pearl"/>
+      <Input value={target} onChange={e=>setTarget(e.target.value)} placeholder="译名，如 末影珍珠"/>
+     </details>
+     <Input value={note} onChange={e=>setNote(e.target.value)} placeholder="备注（可选）：语境、角色、习惯用法"/>
+     <Button size="sm" type="button" onClick={addEntry}>添加到 {current.name}</Button>
+    </div>
+    <details className="space-y-2 border border-border rounded p-2">
+     <summary className="cursor-pointer text-xs font-semibold">展开编辑「{current.name}」全部术语（{current.entries.length} 条）</summary>
+     <div className="max-h-72 space-y-2 overflow-y-auto pt-2">
      {current.entries.map(entry=><div className="rounded border border-border p-2 space-y-1" key={entry.id}>
       <div className="grid grid-cols-2 gap-2">
        <Input aria-label="术语原词" value={entry.source} onChange={e=>updateGroup(current.entries.map(x=>x.id===entry.id?{...x,source:e.target.value}:x))}/>
@@ -125,7 +149,8 @@ export function TerminologyLibrary({onChange}:{onChange:(text:string)=>void}){
       </div>
      </div>)}
      {!current.entries.length&&<p className="text-xs text-muted-foreground">这个分类还是空的，可以直接添加或导入。</p>}
-    </div>
+     </div>
+    </details>
    </>}
   </div>
  </details>;
