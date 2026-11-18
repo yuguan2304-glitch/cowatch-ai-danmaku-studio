@@ -244,7 +244,7 @@ export function SavedTheater() {
         <Button size="sm" variant="ghost" onClick={() => void reload()}><RefreshCw className="size-4"/> 刷新收藏</Button>
       </details>
     </>}
-    <p className="text-xs text-muted-foreground">设备迁移包可将 PC 上的观众设置、世界书、生成历史、收藏弹幕与字幕合并到手机，不重复调用 AI。迁移包不包含原视频、API 密钥和私密中转站地址；需要把原视频复制到手机后点「补充本地视频」，或单独导入完整 .cowatch 放映包。此功能是手动迁移，不是实时云同步。</p>
+    <p className="text-xs text-muted-foreground">旧版数据第一次搬家：老版共映里逐部点「导出放映包（.cowatch）」，新 Alpha 在此点「导入放映包」；网页或较新版还可用 JSON 设备迁移包。两个 App 的私有数据不能直接互读，请勿卸载有收藏的旧版。之后连接云端账号，新的收藏和弹幕记录可自动同步（不传视频原文件）。</p>
     {storageEstimate && <p className="text-xs text-muted-foreground">{storageEstimate}</p>}\n    <p className="text-xs text-muted-foreground">支持导出和导入 .cowatch 完整放映包。断网启动需先联网打开新版共映至少一次，让离线网页资源完成缓存。仅本地文件可以完整离线播放；外链仍需网络。 </p>\n    <p className="text-xs text-muted-foreground">这些都是你自己保存的放映记录，推荐卡片只从本机收藏中轮换，不是其他人的真实投稿。本地视频会占用设备存储；切换浏览器、卸载 App 或清除网站数据可能导致收藏丢失。修改弹幕后记得点「更新这场放映」。</p>
   </section>;
 }
