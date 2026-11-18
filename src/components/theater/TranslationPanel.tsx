@@ -15,6 +15,7 @@ import { useSubtitleDisplay } from "@/lib/subtitle-display";
 import { transcribeVideoWithAudioChunks } from "@/lib/ai/video-transcribe";
 import { transcribeLocalVideo } from "@/lib/ai/local-transcribe";
 import { HybridRepairPanel } from "@/components/theater/HybridRepairPanel";
+import { TranscriptionReviewPanel } from "@/components/theater/TranscriptionReviewPanel";
 import { TerminologyLibrary } from "@/components/theater/TerminologyLibrary";
 import { loadTermGroups,enabledTermGroupId } from "@/lib/translation-terms";
 import { loadTranslationPrefs, saveTranslationPrefs, getRememberedTranslationKey, saveTranslationKey, loadTranscriptionPrefs, saveTranscriptionPrefs, getRememberedTranscriptionKey, saveTranscriptionKey } from "@/lib/translation-preferences";
@@ -105,17 +106,47 @@ export function TranslationPanel(){
  },[settingsLoaded,rememberTranscription,rememberTranscriptionKey,provider.transcribeBaseUrl,provider.transcribeModel,provider.transcribeUseMainKey,transcriptionKey,transcribePreset]);
  // Partial transcription updates cues after every successful chunk. Do not
  // cancel the active transcription merely because cues have grown.
- useEffect(()=>{setTranslated({});},[cues,target,session]);
+ // Cue edits no longer wipe every translated line. Restore by matching original and time below.
  useEffect(()=>{abort.current?.abort();},[session]);
  useEffect(()=>{setCommentTranslations({});abort.current?.abort();},[target,session]);
  useEffect(()=>{const timer=window.setInterval(()=>setTime(getClock()?.getTime()??0),200);return()=>{clearInterval(timer);abort.current?.abort();};},[]);
  const cacheId=(kind:string,text:string)=>JSON.stringify([kind,target,service,service==="custom"?translationUrl:service==="shared"?provider.baseUrl:"google",service==="custom"?translationModel:service==="shared"?provider.model:"nmt",service==="google"?"":effectiveGlossary,text]);
+ const previousCuesRef=useRef<Cue[]>([]);
+ const previousTranslationsRef=useRef<Record<number,string>>({});
+ const previousConfigRef=useRef("");
+ const currentConfig=JSON.stringify([session,target,service,translationUrl,translationModel,provider.baseUrl,provider.model,effectiveGlossary]);
  const readCache=(k:string)=>{try{return localStorage.getItem("cowatch:translation:"+k)??undefined;}catch{return undefined;}};
  const writeCache=(k:string,v:string)=>{try{localStorage.setItem("cowatch:translation:"+k,v);}catch{/* Storage may be unavailable or full. */}};
+ useEffect(()=>{previousTranslationsRef.current=translated;},[translated]);
  useEffect(()=>{
-   setTranslated(Object.fromEntries(cues.flatMap((c,i)=>{const v=readCache(cacheId("cues",c.text));return v===undefined?[]:[[i,v]];})));
+   const sameConfig=previousConfigRef.current===currentConfig;
+   const oldCues=previousCuesRef.current;
+   const oldTranslations=previousTranslationsRef.current;
+   const restored:Record<number,string>={};
+   // Preserve already verified translations only when the ORIGINAL TEXT still
+   // matches. Cue insertions and Groq repairs may shift indices.
+   const byText=new Map<string,number[]>();
+   if(sameConfig)oldCues.forEach((c,i)=>{const list=byText.get(c.text)??[];list.push(i);byText.set(c.text,list);});
+   const used=new Set<number>();
+   cues.forEach((c,i)=>{
+     let value:string|undefined;
+     if(sameConfig){
+       const prev=oldCues[i];
+       if(prev?.text===c.text && Math.abs(prev.start-c.start)<=2 && oldTranslations[i]!==undefined){
+         value=oldTranslations[i];used.add(i);
+       }else{
+         const candidates=byText.get(c.text)??[];
+         const match=candidates.find(j=>!used.has(j)&&Math.abs(oldCues[j]!.start-c.start)<=2&&oldTranslations[j]!==undefined);
+         if(match!==undefined){value=oldTranslations[match];used.add(match);}
+       }
+     }
+     if(value===undefined)value=readCache(cacheId("cues",c.text));
+     if(value!==undefined)restored[i]=value;
+   });
+   setTranslated(restored);
+   previousCuesRef.current=cues;
+   previousConfigRef.current=currentConfig;
    setCommentTranslations(Object.fromEntries(comments.flatMap(c=>{const v=readCache(cacheId("comments",c.text));return v===undefined?[]:[[c.id,v]];})));
-   // Restore cached translations when input or translation configuration changes.
  },[cues,comments,target,service,translationUrl,translationModel,provider.baseUrl,provider.model,effectiveGlossary,session]);
  const active=cues.findIndex(c=>c.start<=time&&c.end>time);
  const run=async(kind:"cues"|"comments",picked?:number[])=>{
@@ -171,8 +202,8 @@ export function TranslationPanel(){
  };
  const editOriginal=(i:number,text:string)=>{
    const previous=cues[i];if(!previous)return;
-   const old=translated[i];
-   if(old!==undefined){writeCache(cacheId("cues",text),old);}
+   if(text===previous.text)return;
+   // Do not silently attach the mistranslated previous line to corrected words.
    useApp.getState().setCues(cues.map((c,j)=>i===j?{...c,text}:c),useApp.getState().cueLabel+" · 人工校对");
  };
  const editTiming=(i:number,field:"start"|"end",value:string)=>{
@@ -340,6 +371,10 @@ export function TranslationPanel(){
      {source.kind!=="file" && <p role="status" className="text-xs text-amber-500">⚠️ 按钮不可点击：请先关闭设置，在播放器上方选择「打开本地视频」并等待视频加载成功。在线视频链接不支持直接提取音轨。</p>}
      <p className="text-xs text-muted-foreground">整段转录时，大视频会在手机本地提取压缩音频，再分段传给转录 API；已完成片段保存在本机，取消或失败后重新打开同一视频、选相同服务继续即可跳过已完成分段。无需下载 Whisper 本地模型。</p>
    </div>
+   <TranscriptionReviewPanel cues={cues} translated={translated} disabled={busy}
+      onCorrect={editOriginal}
+      onRetranslate={indices=>void run("cues",indices)}
+      onGroq={(start,end)=>window.dispatchEvent(new CustomEvent("cowatch:repair-range",{detail:{start,end}}))}/>
    <HybridRepairPanel />
    <details className="rounded border border-border bg-background/60 p-2 text-xs space-y-2">
      <summary className="cursor-pointer font-semibold">其他方法：本机模型识别（需额外下载大文件）</summary>
