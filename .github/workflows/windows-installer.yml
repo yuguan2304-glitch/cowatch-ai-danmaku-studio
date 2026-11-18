@@ -2,6 +2,11 @@ name: Windows CoWatch Alpha Installer
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/windows-installer.yml'
 
 permissions:
   contents: write
