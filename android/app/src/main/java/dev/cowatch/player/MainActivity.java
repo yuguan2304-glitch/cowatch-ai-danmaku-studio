@@ -288,7 +288,10 @@ public final class MainActivity extends Activity {
                         if (!("cowatch.json".equals(name) || "cowatch.xml".equals(name)
                                 || "cowatch-worldbook.txt".equals(name)
                                 || "cowatch-imported-worldbook.json".equals(name)
-                                || "cowatch-sync.json".equals(name))
+                                || "cowatch-sync.json".equals(name)
+                                || (name.endsWith("-共映术语.json") && name.length()<=110
+                                    && !name.contains("/") && !name.contains("\\\\")
+                                    && !name.contains("..") && !name.contains("\\n") && !name.contains("\\r")))
                             || !(mime.startsWith("application/json") || mime.startsWith("application/xml")
                                 || mime.startsWith("text/plain"))) return;
                         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
