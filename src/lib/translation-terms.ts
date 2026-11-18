@@ -35,8 +35,8 @@ export function saveSelectedTermGroupId(id:string){try{localStorage.setItem(SELE
 export function enabledTermGroupId(){
  try{
   const raw=localStorage.getItem(ENABLED);
-  // Older versions used the selected group as the enabled group.
-  return raw===null ? selectedTermGroupId() : raw;
+  // Never enable imported groups implicitly; require an explicit user toggle.
+  return raw??"";
  }catch{return "";}
 }
 export function saveEnabledTermGroupId(id:string){try{localStorage.setItem(ENABLED,id);}catch{}}
