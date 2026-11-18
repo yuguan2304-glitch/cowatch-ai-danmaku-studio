@@ -7,7 +7,7 @@ const encoder = new TextEncoder();
  * No compression or base64 copying of the video is required.
  * Never include API credentials or provider settings.
  */
-export function exportScreeningPackage(screening: SavedScreening): void {
+export async function exportScreeningPackage(screening: SavedScreening): Promise<string> {
   if (screening.sourceKind !== "file" || !screening.file) {
     throw new Error("只有收藏的本地视频能导出完整离线放映包；外链视频没有本地副本。");
   }
@@ -18,15 +18,38 @@ export function exportScreeningPackage(screening: SavedScreening): void {
     video: { name: file.name, type: file.type, lastModified: file.lastModified, size: file.size },
   }));
   const prefix = encoder.encode(MAGIC + String(header.byteLength) + "\n");
-  const blob = new Blob([prefix, header, file], { type: "application/octet-stream" });
+  const name = (screening.title.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").slice(0, 80) || "共映放映") + ".cowatch";
+  const blob = new File([prefix, header, file], name, { type: "application/octet-stream" });
+
+  // Android WebView's DownloadManager rejects blob: URLs. A full video-sized
+  // package must use a supported native share sheet rather than a fake download.
+  const nativeApp = !!(window as Window & {CoWatchUpdater?:unknown}).CoWatchUpdater;
+  if (nativeApp) {
+    if (!navigator.share || (navigator.canShare && !navigator.canShare({ files: [blob] }))) {
+      throw new Error("当前安卓版本不支持直接保存大型放映包。请先使用「手机分享原视频」，并导出设备迁移包备份弹幕；不要卸载或清理应用数据。");
+    }
+    await navigator.share({ files: [blob], title: "共映完整放映包" });
+    return "已打开系统分享窗口。请在文件管理或云盘确认 .cowatch 文件实际保存成功。";
+  }
+
+  if (navigator.share && (!navigator.canShare || navigator.canShare({files:[blob]}))) {
+    try {
+      await navigator.share({ files: [blob], title: "共映完整放映包" });
+      return "已打开分享窗口，请在目标应用确认保存了完整文件。";
+    } catch(e) {
+      if ((e as Error).name === "AbortError") throw new Error("已取消放映包分享，原视频和收藏均未改变");
+      // Let ordinary browser downloads be used where supported.
+    }
+  }
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = (screening.title.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").slice(0, 80) || "共映放映") + ".cowatch";
+  link.download = name;
   document.body.appendChild(link);
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return "已发起浏览器下载；请在下载目录确认文件存在、大小与原视频相符。";
 }
 
 /**
