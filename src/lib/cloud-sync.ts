@@ -79,8 +79,12 @@ async function request(code:string,method:"GET"|"PUT",body?:unknown,knownVersion
 function normalized(s:string):string{
   const d=JSON.parse(s) as Record<string,unknown>;delete d["exportedAt"];return JSON.stringify(d);
 }
-export async function syncNow(code:string):Promise<{pulled:boolean;pushed:boolean;version:number}>{
-  if(busy)return {pulled:false,pushed:false,version:0};
+export type SyncSummary = {
+  pulled:boolean; pushed:boolean; version:number;
+  history:number; screenings:number; presets:number; missingVideos:number;
+};
+export async function syncNow(code:string):Promise<SyncSummary>{
+  if(busy)throw Error("同步正在执行，请等这次同步结束后再试");
   decode(code);busy=true;
   try{
     const lastKey="cowatch:sync:last:"+code.slice(0,8);
@@ -91,8 +95,11 @@ export async function syncNow(code:string):Promise<{pulled:boolean;pushed:boolea
       const last=localStorage.getItem(lastKey);
       const knownVersion=Number(localStorage.getItem(versionKey)||0);
       const remote=await request(code,"GET",undefined,knownVersion);
-      if(remote.unchanged && last===beforeNorm)
-        return {pulled:false,pushed:false,version:remote.version};
+      if(remote.unchanged && last===beforeNorm){
+        const snapshot=await exportDeviceTransfer();
+        return {pulled:false,pushed:false,version:remote.version,history:snapshot.history,
+          screenings:snapshot.screenings,presets:snapshot.presets,missingVideos:snapshot.missingVideos};
+      }
       const locallyEdited=last!==null&&last!==beforeNorm;
       const savedSettings=locallyEdited?useApp.getState().settings:null;
       let pulled=false;
@@ -111,14 +118,18 @@ export async function syncNow(code:string):Promise<{pulled:boolean;pushed:boolea
       if(remote.ciphertext&&mergedNorm===remoteNorm){
         localStorage.setItem(lastKey,mergedNorm);
         localStorage.setItem(versionKey,String(remote.version));
-        return {pulled,pushed:false,version:remote.version};
+        const snapshot=await exportDeviceTransfer();
+        return {pulled,pushed:false,version:remote.version,history:snapshot.history,
+          screenings:snapshot.screenings,presets:snapshot.presets,missingVideos:snapshot.missingVideos};
       }
       try{
         const ciphertext=await encrypt(code,merged);
         const response=await request(code,"PUT",{expectedVersion:remote.version,ciphertext});
         localStorage.setItem(lastKey,mergedNorm);
         localStorage.setItem(versionKey,String(response.version));
-        return {pulled,pushed:true,version:response.version};
+        const snapshot=await exportDeviceTransfer();
+        return {pulled,pushed:true,version:response.version,history:snapshot.history,
+          screenings:snapshot.screenings,presets:snapshot.presets,missingVideos:snapshot.missingVideos};
       }catch(e){
         if(String(e).includes("HTTP 409")&&attempt<2)continue;
         throw e;
