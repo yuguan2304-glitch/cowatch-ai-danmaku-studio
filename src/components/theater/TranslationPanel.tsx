@@ -148,7 +148,7 @@ export function TranslationPanel(){
    try {
      const host=new URL(modelHost);
      if(host.protocol!=="https:"||host.username||host.password||host.search||host.hash||host.pathname!=="/")throw new Error("请选择有效的 HTTPS 模型下载域名");
-     url=host.origin+"/onnx-community/whisper-tiny.en/resolve/main/config.json";
+     url=host.origin+"/onnx-community/whisper-tiny/resolve/main/config.json";
    }catch{setLocalModelCheck("模型下载地址无效：请填写 https:// 开头的域名，不要包含具体文件路径。");return;}
 
    setCheckingModel(true);
@@ -178,7 +178,7 @@ export function TranslationPanel(){
    if(cues.length && !confirm("已有字幕，本次本机识别结果将替换当前字幕。建议先导出 SRT 备份，继续吗？"))return;
    if(!confirm(full
      ? "整段视频将在你的手机上逐段读取并离线识别，通常不比视频播放快，可能耗时很久且占用内存。首次需要从 Hugging Face 下载语音模型（可能数十至上百 MB），不消耗转录 API 额度；确认开始吗？"
-     : "先本机识别前 2 分钟用于测试。首次会下载并缓存本地 Whisper 英语模型（可能数十至上百 MB 流量）；不调用付费转录 API。确认继续？"))return;
+     : "先本机识别前 2 分钟用于测试。首次会下载并缓存本地 Whisper 多语言模型（可能数十至上百 MB 流量）；不调用付费转录 API。确认继续？"))return;
    const ctrl = new AbortController(); abort.current = ctrl; setBusy(true);
    const activeSession = useApp.getState().sessionId;
    try {
@@ -191,7 +191,7 @@ export function TranslationPanel(){
          }
        },
      });
-     if(!result.length){toast.warning("没有识别出英语语音。请检查原视频是否有声音，或导入已有字幕。");return;}
+     if(!result.length){toast.warning("没有识别出清晰的人声。请检查原视频是否有声音，或导入已有字幕。");return;}
      toast.success("本机识别完成：" + result.length + " 段字幕。接下来可点击翻译视频字幕。");
    }catch(e){
      if(!ctrl.signal.aborted){
@@ -294,8 +294,8 @@ export function TranslationPanel(){
      <summary className="cursor-pointer font-semibold">其他方法：本机模型识别（需额外下载大文件）</summary>
      <div className="space-y-2 pt-2">
 
-     <p className="font-semibold">优先：本机免费英语识别 <span className="text-xs font-normal text-muted-foreground">不消耗转录 API 额度</span></p>
-     <p className="text-xs text-muted-foreground">手机在本地读声音，Whisper 小模型识别英语。首次需下载模型（可能数十至上百 MB），使用 CPU / 内存，速度视手机而定；之后浏览器缓存可能复用模型。音轨不会发送到语音服务商。</p>
+     <p className="font-semibold">优先：本机免费多语言识别（中文／英语等） <span className="text-xs font-normal text-muted-foreground">不消耗转录 API 额度</span></p>
+     <p className="text-xs text-muted-foreground">手机在本地读声音，Whisper 小模型识别中文、英语等语言。首次需下载模型（可能数十至上百 MB），使用 CPU / 内存，速度视手机而定；之后浏览器缓存可能复用模型。音轨不会发送到语音服务商。</p>
      <div className="flex flex-wrap gap-2">
        <Button size="sm" disabled={busy||source.kind!=="file"} onClick={()=>void localTranscribe(false)}>免费识别前 2 分钟（先测试）</Button>
        <Button size="sm" variant="outline" disabled={busy||source.kind!=="file"} onClick={()=>void localTranscribe(true)}>免费识别整段视频</Button>
@@ -312,7 +312,7 @@ export function TranslationPanel(){
      <Button size="sm" variant="ghost" disabled={busy||checkingModel} onClick={()=>void checkLocalModelAccess()}>{checkingModel?"检测中…":"检测模型下载连接（免费、小流量）"}</Button>
      {localModelCheck&&<p role="status" className="rounded border border-border p-2 text-xs break-words">{localModelCheck}</p>}
      {localError&&<p role="alert" className="rounded border border-destructive/40 p-2 text-xs break-words">上次识别失败：{localError}。若是模型下载失败，可先点击上方连接检测。已下载的部分资源可能留在浏览器缓存中。</p>}
-     <p className="text-xs text-muted-foreground">仅对本地视频启用，支持情况依浏览器。多人说话、游戏音效与重叠对白可能识别不准；可在下方编辑字幕。字幕翻译仍可能使用收费 API。</p>
+     <p className="text-xs text-muted-foreground">适用于手机及电脑网页版，但需要首次下载本地多语言模型；如连接失败请先检测下载源。仅对本地视频启用，支持情况依浏览器。多人说话、游戏音效与重叠对白可能识别不准；可在下方编辑字幕。字幕翻译仍可能使用收费 API。</p>
      </div>
    </details>
    <details className="rounded border border-border bg-background/60 p-2 text-xs space-y-2">
