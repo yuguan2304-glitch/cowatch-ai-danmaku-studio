@@ -24,8 +24,20 @@ export function TranslationPanel(){
  const [localModelCheck,setLocalModelCheck]=useState("");
  const [checkingModel,setCheckingModel]=useState(false);
  const [modelSource,setModelSource]=useState<"cowatch"|"official"|"mirror"|"custom">(()=>{
-   try {const v=localStorage.getItem("cowatch:whisper-model-source:v1");return v==="official"||v==="mirror"||v==="custom"?v:"cowatch";}catch{return "official";}
+   try {const v=localStorage.getItem("cowatch:whisper-model-source:v1");return v==="official"||v==="mirror"||v==="custom"?v:"cowatch";}catch{return "cowatch";}
  });
+ const [whisperSize,setWhisperSize]=useState<"tiny"|"base">(()=>{
+   try{return localStorage.getItem("cowatch:whisper-size:v1")==="tiny"?"tiny":"base";}catch{return "base";}
+ });
+ const [cacheStatus,setCacheStatus]=useState("");
+ useEffect(()=>{try{localStorage.setItem("cowatch:whisper-size:v1",whisperSize);}catch{}},[whisperSize]);
+ const keepModelCache=async()=>{
+   if(!navigator.storage?.persist){setCacheStatus("当前浏览器不支持申请持久存储；下载后仍会使用模型缓存，但系统可能清理。");return;}
+   try{
+     const kept=await navigator.storage.persist();
+     setCacheStatus(kept?"✓ 浏览器已允许持久存储；模型下载一次后可复用，除非你主动清除网站数据。":"浏览器未授予持久存储；模型仍会缓存，但储存空间紧张时可能被清理。");
+   }catch{setCacheStatus("持久存储申请失败；仍会尝试使用浏览器缓存。");}
+ };
  const [customModelHost,setCustomModelHost]=useState(()=>{
    try{return localStorage.getItem("cowatch:whisper-model-host:v1")||"";}catch{return "";}
  });
@@ -148,7 +160,7 @@ export function TranslationPanel(){
    try {
      const host=new URL(modelHost);
      if(host.protocol!=="https:"||host.username||host.password||host.search||host.hash||(host.pathname!=="/"&&host.pathname!=="/api/model/v1/"))throw new Error("请选择有效的 HTTPS 模型下载地址");
-     url=host.origin+(host.pathname==="/api/model/v1/"?host.pathname:"/")+"onnx-community/whisper-tiny/resolve/main/config.json";
+     url=host.origin+(host.pathname==="/api/model/v1/"?host.pathname:"/")+"onnx-community/whisper-"+whisperSize+"/resolve/main/config.json";
    }catch{setLocalModelCheck("模型下载地址无效：请填写 https:// 开头的域名，不要包含具体文件路径。");return;}
 
    setCheckingModel(true);
@@ -177,13 +189,13 @@ export function TranslationPanel(){
    if(!file){toast.error("请先打开本地视频");return;}
    if(cues.length && !confirm("已有字幕，本次本机识别结果将替换当前字幕。建议先导出 SRT 备份，继续吗？"))return;
    if(!confirm(full
-     ? "整段视频将在你的手机上逐段读取并离线识别，通常不比视频播放快，可能耗时很久且占用内存。首次需要从 Hugging Face 下载语音模型（可能数十至上百 MB），不消耗转录 API 额度；确认开始吗？"
+     ? "整段视频将在你的手机上逐段读取并离线识别，通常不比视频播放快，可能耗时很久且占用内存。首次需要从选定来源下载语音模型（可能数十至上百 MB），不消耗转录 API 额度；确认开始吗？"
      : "先本机识别前 2 分钟用于测试。首次会下载并缓存本地 Whisper 多语言模型（可能数十至上百 MB 流量）；不调用付费转录 API。确认继续？"))return;
    const ctrl = new AbortController(); abort.current = ctrl; setBusy(true);
    const activeSession = useApp.getState().sessionId;
    try {
      const result = await transcribeLocalVideo({
-       file,signal:ctrl.signal,maxSeconds:full?Number.POSITIVE_INFINITY:120,modelHost,
+       file,signal:ctrl.signal,maxSeconds:full?Number.POSITIVE_INFINITY:120,modelHost,modelSize:whisperSize,
        onProgress:setTranscriptionProgress,
        onPartial:items=>{
          if(useApp.getState().sessionId===activeSession && !ctrl.signal.aborted) {
@@ -295,7 +307,16 @@ export function TranslationPanel(){
      <div className="space-y-2 pt-2">
 
      <p className="font-semibold">优先：本机免费多语言识别（中文／英语等） <span className="text-xs font-normal text-muted-foreground">不消耗转录 API 额度</span></p>
-     <p className="text-xs text-muted-foreground">手机在本地读声音，Whisper 小模型识别中文、英语等语言。首次需下载模型（可能数十至上百 MB），使用 CPU / 内存，速度视手机而定；之后浏览器缓存可能复用模型。音轨不会发送到语音服务商。</p>
+     <p className="text-xs text-muted-foreground">手机或电脑在本地读声音，Whisper 模型识别中文、英语等语言。首次需下载模型（可能数十至上百 MB），使用 CPU / 内存，速度视手机而定；之后浏览器缓存可能复用模型。音轨不会发送到语音服务商。</p>
+     <label className="block text-xs space-y-1">选择本地语音模型
+       <select className="w-full rounded border bg-background p-2" value={whisperSize} disabled={busy} onChange={e=>{setWhisperSize(e.target.value as "tiny"|"base");setLocalModelCheck("");}}>
+         <option value="base">Whisper Base 多语言（推荐，识别能力更强，下载和内存开销较大）</option>
+         <option value="tiny">Whisper Tiny 多语言（低配置备用，复杂游戏语音容易失真）</option>
+       </select>
+     </label>
+     <p className="text-xs text-muted-foreground">使用浏览器 Cache API 缓存所选模型：同一浏览器、同一网址、同一模型和下载源，通常首次下载后就会复用，无须每次下载。不同模型需要分别下载；清理浏览器网站数据、系统自动回收缓存或切换浏览器后可能重新下载。</p>
+     <Button size="sm" variant="outline" type="button" disabled={busy} onClick={()=>void keepModelCache()}>申请保留本地模型缓存</Button>
+     {cacheStatus&&<p role="status" className="text-xs text-muted-foreground">{cacheStatus}</p>}
      <div className="flex flex-wrap gap-2">
        <Button size="sm" disabled={busy||source.kind!=="file"} onClick={()=>void localTranscribe(false)}>免费识别前 2 分钟（先测试）</Button>
        <Button size="sm" variant="outline" disabled={busy||source.kind!=="file"} onClick={()=>void localTranscribe(true)}>免费识别整段视频</Button>
