@@ -25,7 +25,18 @@ function App() {
 
 // Register only in production; the service worker caches application files,
 // never user's videos, API requests or third-party resources.
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
+// Native Android WebView has its own offline assets and online-update loader.
+// A browser service worker here can pin old HTML indefinitely and hide new UI.
+if (location.hostname === "appassets.androidplatform.net" && "serviceWorker" in navigator) {
+  void navigator.serviceWorker.getRegistrations().then(async regs => {
+    await Promise.all(regs.map(reg => reg.unregister()));
+    if ("caches" in window) {
+      const keys=await caches.keys();
+      await Promise.all(keys.filter(k=>k.startsWith("cowatch-shell-")).map(k=>caches.delete(k)));
+    }
+  }).catch(()=>undefined);
+}
+if (import.meta.env.PROD && location.hostname !== "appassets.androidplatform.net" && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
   });
