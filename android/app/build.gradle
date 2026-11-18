@@ -13,7 +13,7 @@ android {
     }
 
     defaultConfig {
-        applicationId offlineBundle ? 'dev.cowatch.player.alpha.stable2026' : 'dev.cowatch.player'
+        applicationId offlineBundle ? 'dev.cowatch.player.alpha.autoupdate' : 'dev.cowatch.player'
         buildConfigField 'boolean', 'OFFLINE_BUNDLE', offlineBundle ? 'true' : 'false'
         resValue 'string', 'cowatch_app_name', offlineBundle ? '共映 Alpha 安全测试' : '共映 CoWatch'
         minSdk 26
