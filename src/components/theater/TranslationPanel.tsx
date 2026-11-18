@@ -115,7 +115,9 @@ export function TranslationPanel(){
  // Match the exact source sentence AND target language; never guess across conflicting translations.
  const recoverLegacyTranslations=()=>{
    if(!cues.length){toast.info("请先恢复原来的英文字幕");return;}
-   const lookup=new Map<string,Set<string>>();
+   const exact=new Map<string,Set<string>>();
+   const normalized=new Map<string,Set<string>>();
+   const compact=(t:string)=>t.normalize("NFKC").replace(/\\s+/g," ").trim().toLowerCase();
    let scanned=0;
    try{
      for(let i=0;i<localStorage.length;i++){
@@ -126,31 +128,36 @@ export function TranslationPanel(){
        if(!Array.isArray(info)||info.length!==7||info[0]!=="cues"||info[1]!==target||typeof info[6]!=="string")continue;
        const value=localStorage.getItem(name);
        if(!value?.trim())continue;
-       const sentence=info[6];
-       if(!lookup.has(sentence))lookup.set(sentence,new Set());
-       lookup.get(sentence)!.add(value);
+       const sentence=info[6] as string;
+       if(!exact.has(sentence))exact.set(sentence,new Set());
+       exact.get(sentence)!.add(value);
+       const norm=compact(sentence);
+       if(norm){
+         if(!normalized.has(norm))normalized.set(norm,new Set());
+         normalized.get(norm)!.add(value);
+       }
        scanned++;
      }
    }catch{toast.error("无法读取旧译文缓存；请不要清除《共映》的应用数据");return;}
    const restored:Record<number,string>={};
-   let ambiguous=0;
+   let ambiguous=0, exactCount=0, normalizedCount=0;
    cues.forEach((cue,index)=>{
      if(translated[index]?.trim())return;
-     const candidates=lookup.get(cue.text);
-     if(candidates?.size===1)restored[index]=[...candidates][0]!;
-     else if(candidates && candidates.size>1)ambiguous++;
+     const original=exact.get(cue.text);
+     const candidates=original?.size?original:normalized.get(compact(cue.text));
+     if(candidates?.size===1){
+       restored[index]=[...candidates][0]!;
+       if(original?.size)exactCount++;else normalizedCount++;
+     } else if(candidates && candidates.size>1)ambiguous++;
    });
    const count=Object.keys(restored).length;
-   if(!count){toast.info(scanned?"找到旧缓存，但没有可安全匹配的缺失译文（存在 "+ambiguous+" 条有多个译法）":"没有找到相同目标语言的旧译文缓存");return;}
-   if(!confirm("已在本机找到 "+count+" 条原文完全一致、且译文唯一的旧缓存。"+(ambiguous?"另外 "+ambiguous+" 条存在不同译法，将跳过。":"")+"恢复时不会调用任何翻译 API，也不会覆盖现有译文。继续吗？"))return;
-   // Explicit recovery copies the chosen text to the present model's lookup key.
-   // Preserve original cache keys, allowing later recovery if settings change again.
-   for(const [index,text] of Object.entries(restored)){
-     writeCache(cacheId("cues",cues[Number(index)]!.text),text);
-   }
+   if(!count){toast.info(scanned?"已扫描 "+scanned+" 条旧缓存，没有新增可安全匹配的译文；多译法冲突 "+ambiguous+" 处":"没有找到同目标语言的旧译文缓存。仍可仅补翻缺失项");return;}
+   if(!confirm("免费找到 "+count+" 条旧译文：原文完全一致 "+exactCount+" 条、仅空格和字符宽度不同 "+normalizedCount+" 条。"+(ambiguous?"有 "+ambiguous+" 条多个译法，将跳过。":"")+"不调用 API，不覆盖现有译文。继续恢复？"))return;
+   for(const [index,text] of Object.entries(restored))writeCache(cacheId("cues",cues[Number(index)]!.text),text);
    mergeTranslated(restored);
-   toast.success("已免费找回 "+count+" 条中文译文；建议立即导出双语 SRT 备份");
+   toast.success("免费找回 "+count+" 条旧译文！请优先导出双语 SRT 备份");
  };
+
  const previousCuesRef=useRef<Cue[]>([]);
  const previousTranslationsRef=useRef<Record<number,string>>({});
  const previousConfigRef=useRef("");
@@ -189,7 +196,8 @@ export function TranslationPanel(){
    setCommentTranslations(Object.fromEntries(comments.flatMap(c=>{const v=readCache(cacheId("comments",c.text));return v===undefined?[]:[[c.id,v]];})));
  },[cues,comments,target,service,translationUrl,translationModel,provider.baseUrl,provider.model,effectiveGlossary,session]);
  const active=cues.findIndex(c=>c.start<=time&&c.end>time);
- const run=async(kind:"cues"|"comments",picked?:number[])=>{
+ const missingCount=cues.filter((_,i)=>!translated[i]?.trim()).length;
+ const run=async(kind:"cues"|"comments",picked?:number[],maxMissing?:number)=>{
    const baseUrl=service==="google"?"https://translation.googleapis.com":service==="custom"?translationUrl:provider.baseUrl;
    const apiKey=service==="shared"?key:translationKey;
    const model=service==="custom"?translationModel:provider.model;
@@ -197,10 +205,14 @@ export function TranslationPanel(){
    if(!checked.ok){toast.error("翻译 API 地址无效");return;}
    if(service==="shared"&&provider.kind!=="openai"){toast.error("复用模式目前仅支持 OpenAI 兼容接口；请选择独立翻译接口");return;}
    if(!apiKey){toast.error("请先填写翻译 API 密钥");return;}
-   const input=kind==="cues"?cues.map((c,i)=>({index:i,text:c.text})).filter(c=>picked?picked.includes(c.index):translated[c.index]===undefined):comments.map((c,i)=>({index:i,text:c.text,id:c.id})).filter(c=>commentTranslations[c.id]===undefined);
+   const allInput=kind==="cues"
+     ? cues.map((c,i)=>({index:i,text:c.text})).filter(c=>picked?picked.includes(c.index):!translated[c.index]?.trim())
+     : comments.map((c,i)=>({index:i,text:c.text,id:c.id})).filter(c=>!commentTranslations[c.id]?.trim());
+   const input=typeof maxMissing==="number"?allInput.slice(0,maxMissing):allInput;
    if(!input.length){toast.info("没有待翻译内容");return;}
-   if(!confirm("将文本"+(service==="google"?"":"与术语表")+"发送给 "+checked.url.host+"，可能产生 API 费用，继续？"))return;
-   const ctrl=new AbortController();abort.current=ctrl;setBusy(true);
+   const batchCount=Math.ceil(input.length/30);
+   if(!confirm("将仅提交 "+input.length+" 条"+(kind==="cues"?"缺失的字幕":"弹幕")+"给 "+checked.url.host+"（约 "+batchCount+" 次翻译请求），可能消耗 API 额度。现有译文不会重译。确认继续？"))return;
+  const ctrl=new AbortController();abort.current=ctrl;setBusy(true);
    try{
      for(let i=0;i<input.length;i+=30){
        const part=input.slice(i,i+30);
@@ -531,7 +543,8 @@ export function TranslationPanel(){
    </div>
    <p className="text-muted-foreground">只提交选中字幕的原文，不发送整段音频。调用付费翻译 API 前会再次确认。已翻译的选中句也可以重新翻译。</p>
  </div>}
- <div className="flex flex-wrap gap-2">{translationMode==="all"&&<Button size="sm" disabled={busy||!cues.length} onClick={()=>void run("cues")}>一键补齐视频翻译（{cues.length} 段）</Button>}<Button size="sm" disabled={busy||!comments.length} onClick={()=>void run("comments")}>翻译弹幕文本</Button>{busy&&<Button size="sm" variant="outline" onClick={()=>abort.current?.abort()}>取消</Button>}<Button size="sm" variant="outline" disabled={!source.file||busy} onClick={()=>void restoreCachedSubtitles()}>恢复已缓存的转录（免费）</Button><Button size="sm" variant="outline" disabled={!cues.length||busy} onClick={recoverLegacyTranslations}>找回旧模型译文（免费）</Button><Button size="sm" variant="outline" disabled={!cues.length} onClick={exportSrt}>导出 SRT</Button></div>
+ <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2 text-xs">已翻译 {cues.length-missingCount}/{cues.length} 条 · 尚缺 {missingCount} 条。先点「找回旧模型译文（免费）」，确认恢复完毕后再补翻缺失部分。切换弹幕模型不会要求重新翻译已保存的字幕。</div>
+ <div className="flex flex-wrap gap-2">{translationMode==="all"&&<><Button size="sm" disabled={busy||!missingCount} onClick={()=>void run("cues",undefined,30)}>仅补翻缺失 30 条（最多 1 次 API 请求）</Button><Button size="sm" variant="outline" disabled={busy||!missingCount} onClick={()=>void run("cues")}>补齐剩余 {missingCount} 条（收费前确认）</Button></>}<Button size="sm" disabled={busy||!comments.length} onClick={()=>void run("comments")}>翻译弹幕文本</Button>{busy&&<Button size="sm" variant="outline" onClick={()=>abort.current?.abort()}>取消</Button>}<Button size="sm" variant="outline" disabled={!source.file||busy} onClick={()=>void restoreCachedSubtitles()}>恢复已缓存的转录（免费）</Button><Button size="sm" variant="outline" disabled={!cues.length||busy} onClick={recoverLegacyTranslations}>找回旧模型译文（免费）</Button><Button size="sm" variant="outline" disabled={!cues.length} onClick={exportSrt}>导出 SRT</Button></div>
  {!cues.length&&<p className="rounded border border-border bg-secondary/40 p-2 text-sm">尚无带时间戳的视频字幕。请先在播放器上方「导入字幕 SRT/VTT」，或使用「AI 转录音轨」生成字幕。没有字幕时不能可靠地翻译音轨。</p>}
  <label className="block text-sm">视频字幕显示 <select className="rounded border bg-background p-1" value={mode} onChange={e=>setMode(e.target.value as typeof mode)}><option value="both">双语</option><option value="original">原文</option><option value="translated">译文</option><option value="off">关闭</option></select></label>
  <div className="grid gap-3 rounded border border-border bg-secondary/20 p-3 text-sm sm:grid-cols-2">
