@@ -64,21 +64,30 @@ export async function syncNow(config:SyncConfig):Promise<{pulled:boolean;pushed:
     const c=await fresh(config);
     const remote=await request(c,"/rest/v1/cowatch_sync?select=user_id,data,updated_at&user_id=eq."+encodeURIComponent(c.userId),"GET",undefined,c.accessToken) as Snapshot[];
     const initial=(await exportDeviceTransfer()).text;
+    const initialNormalized=normalized(initial);
+    const previousHash=localStorage.getItem("cowatch:cloud-last-synced:"+c.userId);
+    const localChanged=previousHash!==null && previousHash!==initialNormalized;
+    const localSettings=localChanged?useApp.getState().settings:null;
     let pulled=false;
     const record=remote?.[0];
     if(record?.data) {
       const raw=JSON.stringify(record.data);
-      // Merge remote data locally, newest history/screenings win; never clear local files.
-      await importDeviceTransfer(raw);
-      pulled=normalized(raw)!==normalized(initial);
+      // Merge remote history and screenings; keep any unsynced local settings.
+      if(normalized(raw)!==initialNormalized){
+        await importDeviceTransfer(raw);
+        pulled=true;
+        if(localSettings)useApp.getState().setSettings(localSettings);
+      }
     }
     const merged=(await exportDeviceTransfer()).text;
     // Keep remote in sync with merged local snapshot only if the content differs.
     if(!record || normalized(merged)!==normalized(JSON.stringify(record.data))) {
       await request(c,"/rest/v1/cowatch_sync?on_conflict=user_id","POST",
         {user_id:c.userId,data:JSON.parse(merged)},c.accessToken);
+      localStorage.setItem("cowatch:cloud-last-synced:"+c.userId,normalized(merged));
       return {pulled,pushed:true};
     }
+    localStorage.setItem("cowatch:cloud-last-synced:"+c.userId,normalized(merged));
     return {pulled,pushed:false};
   }finally{syncing=false;}
 }
