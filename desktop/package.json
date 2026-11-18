@@ -1,6 +1,6 @@
 {
   "name": "cowatch-alpha-desktop",
-  "version": "0.2.2-alpha",
+  "version": "0.2.3-alpha",
   "private": true,
   "description": "CoWatch Alpha Windows app",
   "main": "main.cjs",
