@@ -55,6 +55,9 @@ export function DanmakuCanvas() {
     let raf = 0;
     let lastTime = NaN;
     let lastDrawAt = -Infinity;
+    let smoothTime = NaN;
+    let smoothFrameAt = NaN;
+    let wasPaused = true;
     const glyphCache = new Map<string, HTMLCanvasElement>();
     const cacheMax = 80;
     const cachePixelBudget = 3_000_000; // ~12MB RGBA, bounded on Android
@@ -115,11 +118,29 @@ export function DanmakuCanvas() {
         }
         return;
       }
-      const t = clock.getTime() - (display.timeOffset ?? 0);
-      // Reuse video time for smooth movement. At rest no redraw is needed.
-      if (Math.abs(t - lastTime) < 0.005) return;
-      // Target approximately 60fps if the device can sustain it; rAF
-      // automatically slows when Android is under load.
+      const observed = clock.getTime() - (display.timeOffset ?? 0);
+      const paused = clock.isPaused();
+      const rate = Math.max(0, Math.min(4, clock.getRate() || 1));
+      // Android media currentTime can advance in coarse jumps even when the
+      // compositor is rendering at 60Hz. Predict between those readings and
+      // gently correct drift; immediately snap on seeks, stalls and resumes.
+      if (!Number.isFinite(smoothTime) || !Number.isFinite(smoothFrameAt) || paused !== wasPaused ||
+          Math.abs(observed - smoothTime) > 0.35 ||
+          now - smoothFrameAt > 300) {
+        smoothTime = observed;
+      } else if (!paused) {
+        const elapsed = Math.max(0, Math.min(0.08, (now - smoothFrameAt) / 1000));
+        const predicted = smoothTime + elapsed * rate;
+        const error = observed - predicted;
+        smoothTime = predicted + Math.max(-0.015, Math.min(0.015, error * 0.08));
+      } else {
+        smoothTime = observed;
+      }
+      smoothFrameAt = now;
+      wasPaused = paused;
+      const t = smoothTime;
+      if (Math.abs(t - lastTime) < 0.002) return;
+      // Target ~60fps without tying movement to the cadence of currentTime updates.
       if (now - lastDrawAt < 15) return;
       lastDrawAt = now;
       lastTime = t;
