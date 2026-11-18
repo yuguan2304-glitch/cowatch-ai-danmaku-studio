@@ -28,3 +28,7 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+- AI calls go from the browser directly to the user's own configured provider; keys live only in the in-memory `useSecrets` store (never storage, links, logs). Why: public site where each visitor pays for their own AI usage.
+- Shared/exported viewer presets must pass through `sanitizeAudience` + `containsSecretLike` in `src/lib/preset-share.ts`, and share links carry data only in the URL #fragment. Why: sharing must never leak keys, private data, or upload anything implicitly.
