@@ -149,19 +149,65 @@ export async function transcribeVideoWithAudioChunks(opts: {
       });
       const stopRecording = () => { if (current.state !== "inactive") current.stop(); video.pause(); };
       onProgress?.(`正在提取音频：${Math.floor(start / 60)}:${String(Math.floor(start % 60)).padStart(2,"0")} / ${Math.floor(video.duration / 60)} 分（保持应用在前台）`);
-      current.start();
+      // Seek BEFORE recording. Recording while the video is seeking can create
+      // empty clips or leave Android WebView waiting indefinitely.
+      const waitForSeek = () => new Promise<void>((resolve, reject) => {
+        if (!video.seeking && Math.abs(video.currentTime - start) < 0.4) { resolve(); return; }
+        let timeout: ReturnType<typeof setTimeout>;
+        const cleanup = () => {
+          clearTimeout(timeout);
+          video.removeEventListener("seeked", ready);
+          video.removeEventListener("error", failed);
+          signal.removeEventListener("abort", cancelled);
+        };
+        const ready = () => { cleanup(); resolve(); };
+        const failed = () => { cleanup(); reject(new Error("无法定位到音频片段，请重新选择视频或重试此段")); };
+        const cancelled = () => { cleanup(); reject(new DOMException("用户已取消转录", "AbortError")); };
+        video.addEventListener("seeked", ready, { once: true });
+        video.addEventListener("error", failed, { once: true });
+        signal.addEventListener("abort", cancelled, { once: true });
+        timeout = setTimeout(() => { cleanup(); reject(new Error("视频定位超过 20 秒未响应；已保存的字幕不会丢失，重新打开可续转")); }, 20000);
+      });
       video.currentTime = start;
-      try { await video.play(); } catch {
+      await waitForSeek();
+      assertNotCancelled();
+      current.start();
+      try {
+        await Promise.race([
+          video.play(),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("音轨播放启动超时；请保持应用在前台重试")), 20000)),
+        ]);
+      } catch {
         stopRecording();
-        throw new Error("浏览器阻止后台音频提取。请保持共映在前台，并使用 Chrome 或安卓应用。");
+        throw new Error("浏览器无法启动音频播放，可能被安卓暂停。已完成片段已保存，可重新打开续转。");
       }
       await new Promise<void>((resolve, reject) => {
+        let lastPosition = video.currentTime;
+        let lastAdvanceAt = Date.now();
+        let lastShownSecond = -1;
+        const fail = (message: string) => {
+          stopRecording();
+          reject(new Error(message + "；已完成片段已保存，重新打开可从失败位置续转"));
+        };
         const watch = () => {
           if (signal.aborted) { stopRecording(); reject(new DOMException("用户已取消转录", "AbortError")); return; }
-          if (video.error) { stopRecording(); reject(new Error("视频音频播放中断")); return; }
-          if (video.currentTime >= end - 0.15 || video.ended) { stopRecording(); resolve(); }
+          if (video.error) { fail("视频音频播放中断"); return; }
+          if (video.currentTime >= end - 0.15 || video.ended) { stopRecording(); resolve(); return; }
+          if (video.currentTime > lastPosition + 0.08) {
+            lastPosition = video.currentTime;
+            lastAdvanceAt = Date.now();
+          }
+          if (Date.now() - lastAdvanceAt > 15000) {
+            fail("音轨连续 15 秒没有前进（安卓浏览器可能暂停或卡住）");
+            return;
+          }
+          const second = Math.floor(video.currentTime);
+          if (second !== lastShownSecond) {
+            lastShownSecond = second;
+            onProgress?.(`正在提取音频：${Math.floor(second / 60)}:${String(second % 60).padStart(2, "0")} / ${Math.floor(video.duration / 60)} 分（已完成片段自动保存）`);
+          }
         };
-        timer = setInterval(watch, 180);
+        timer = setInterval(watch, 250);
         watch();
       }).finally(() => { if (timer) clearInterval(timer); timer = undefined; });
       await stopped;
