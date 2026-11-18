@@ -5,7 +5,7 @@ import { useApp } from "./store";
 // No Supabase project or third-party account is required.
 const STORAGE_KEY = "cowatch:pairing-code:v1";
 const API = "https://cowatch-ai-danmaku-studio.yuguan2304.workers.dev/api/sync/v1";
-const MAX_BYTES = 1_400_000;
+const MAX_BYTES = 500_000;
 let busy=false;
 
 function encode(b:Uint8Array):string{
@@ -45,7 +45,7 @@ async function encryptionKey(code:string):Promise<CryptoKey>{
   return crypto.subtle.importKey("raw",new Uint8Array(bytes).buffer,"AES-GCM",false,["encrypt","decrypt"]);
 }
 async function encrypt(code:string,plain:string):Promise<string>{
-  if(plain.length>MAX_BYTES)throw Error("当前元数据太大，超过云端安全同步上限");
+  if(plain.length>MAX_BYTES)throw Error("共映 Alpha 云同步每份元数据上限约 500KB：请通过本地放映包备份大批收藏，视频原文件从不上传");
   const iv=crypto.getRandomValues(new Uint8Array(12));
   const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},
     await encryptionKey(code),new TextEncoder().encode(plain)));
