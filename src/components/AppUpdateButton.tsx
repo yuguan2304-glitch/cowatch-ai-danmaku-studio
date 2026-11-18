@@ -10,6 +10,8 @@ function updater():NativeUpdater|undefined{
 }
 export function AppUpdateButton(){
   const [installed,setInstalled]=useState<number|null>(null);
+  const [webMode,setWebMode]=useState(false);
+  const [unknownApp,setUnknownApp]=useState(false);
   const [available,setAvailable]=useState<Update|null>(null);
   const [autoWeb,setAutoWeb]=useState(false);
   const [checking,setChecking]=useState(false);
@@ -18,9 +20,9 @@ export function AppUpdateButton(){
     setChecking(true);
     try{
       const buildResponse=await fetch("/cowatch-build.json",{cache:"no-store"});
-      if(!buildResponse.ok||!buildResponse.headers.get("content-type")?.includes("json"))return;
+      if(!buildResponse.ok||!buildResponse.headers.get("content-type")?.includes("json")){setWebMode(true);return;}
       const build=await buildResponse.json() as {platform?:string;build?:number;package?:string};
-      if(build.platform!=="android"||build.package!=="dev.cowatch.player.alpha.autoupdate"||!Number.isInteger(build.build))return;
+      if(build.platform!=="android"||build.package!=="dev.cowatch.player.alpha.autoupdate"||!Number.isInteger(build.build)){setUnknownApp(true);return;}
       setInstalled(build.build!);
       // Native Alpha 89+ keeps the same appassets origin and loads web features
       // directly from first-party Cloudflare assets. New APKs are only needed
@@ -48,11 +50,15 @@ export function AppUpdateButton(){
       const latest=options[0]??null;
       setAvailable(latest&&latest.build>build.build!?latest:null);
       if(showFeedback)toast.info(latest&&latest.build>build.build!?("发现共映新版 Alpha "+latest.build):"当前已是最新版，或暂未发现可用更新");
-    }catch(e){if(showFeedback)toast.error(e instanceof Error?e.message:"检查更新失败");}
+    }catch(e){setUnknownApp(true);if(showFeedback)toast.error(e instanceof Error?e.message:"检查更新失败");}
     finally{setChecking(false);}
   }
   useEffect(()=>{void check(false);},[]);
-  if(installed===null)return null;
+  if(installed===null){
+    if(webMode)return <button type="button" onClick={()=>window.location.reload()} title="网页版自动获得最新网页功能，无需安装 APK" className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-primary"><DownloadCloud className="size-4"/> 刷新网页版</button>;
+    if(unknownApp)return <button type="button" onClick={()=>window.open("https://github.com/yuguan2304-glitch/cowatch-ai-danmaku-studio/releases","_blank","noopener,noreferrer")} title="当前安装版本没有可识别的应用内更新标记；打开共映发布页面" className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-primary"><DownloadCloud className="size-4"/> 版本与更新</button>;
+    return <span className="text-xs text-muted-foreground">检查版本…</span>;
+  }
   const install=()=>{
     if(!available)return;
     const url=available.url;
