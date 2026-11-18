@@ -16,7 +16,7 @@ import { transcribeVideoWithAudioChunks } from "@/lib/ai/video-transcribe";
 import { transcribeLocalVideo } from "@/lib/ai/local-transcribe";
 import { HybridRepairPanel } from "@/components/theater/HybridRepairPanel";
 import { TerminologyLibrary } from "@/components/theater/TerminologyLibrary";
-import { loadTermGroups,selectedTermGroupId } from "@/lib/translation-terms";
+import { loadTermGroups,enabledTermGroupId } from "@/lib/translation-terms";
 import { loadTranslationPrefs, saveTranslationPrefs, getRememberedTranslationKey, saveTranslationKey, loadTranscriptionPrefs, saveTranscriptionPrefs, getRememberedTranscriptionKey, saveTranscriptionKey } from "@/lib/translation-preferences";
 type Translated = { index:number; text:string };
 function stamp(n:number){const ms=Math.max(0,Math.round(n*1000));return [Math.floor(ms/3600000),Math.floor(ms/60000)%60,Math.floor(ms/1000)%60].map(x=>String(x).padStart(2,"0")).join(":")+","+String(ms%1000).padStart(3,"0");}
@@ -67,7 +67,7 @@ export function TranslationPanel(){
  const settingsLoaded=useApp(s=>s.settingsLoaded);
  const [target,setTarget]=useState(()=>loadTranslationPrefs()?.target??"简体中文"),[glossary,setGlossary]=useState(()=>loadTranslationPrefs()?.glossary??""),[commentTranslations,setCommentTranslations]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[time,setTime]=useState(0);
  const [categoryTerms,setCategoryTerms]=useState(()=>{
-   const group=loadTermGroups().find(g=>g.id===selectedTermGroupId());
+   const group=loadTermGroups().find(g=>g.id===enabledTermGroupId());
    return group?.entries.map(e=>e.source+" = "+e.target+(e.note?"（"+e.note+"）":"")).join("\\n")??"";
  });
  const effectiveGlossary=[glossary.trim(),categoryTerms.trim()].filter(Boolean).join("\\n").slice(0,10000);
