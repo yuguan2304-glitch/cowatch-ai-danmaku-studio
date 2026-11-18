@@ -3,7 +3,7 @@
 interface D1Like {
   prepare(sql:string): {bind(...args:unknown[]):{first<T=unknown>():Promise<T|null>;run():Promise<{meta?:{changes?:number}}>}};
 }
-interface Env { SYNC_DB: D1Like; ASSETS:{fetch(request:Request):Promise<Response>}; }
+interface Env { SYNC_DB: D1Like; AI?:{run(model:string,options:{audio:string;task:string}):Promise<unknown>}; ASSETS:{fetch(request:Request):Promise<Response>}; }
 // Keep each encrypted vault deliberately small: no video file belongs in D1.
 const MAX_PAYLOAD=800_000;
 const allowedOrigins = new Set([
@@ -85,10 +85,59 @@ async function sync(req:Request,env:Env):Promise<Response>{
     return json(req,{error:"服务器同步失败，请稍后重试；本地数据不会被清除"},503);
   }
 }
+
+/**
+ * Authenticated, quota-capped optional Cloudflare Whisper transcription.
+ * A user needs an existing private sync vault; a random unauthenticated
+ * visitor cannot run paid AI. No audio or transcript is stored server-side.
+ * Limit all users to <= 2h audio/day in aggregate as an additional safety cap.
+ */
+async function transcribeAudio(req:Request,env:Env):Promise<Response>{
+  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(req)});
+  if(req.method!=="POST")return json(req,{error:"只允许 POST"},405);
+  if(!env.AI)return json(req,{error:"Cloudflare Workers AI 尚未启用，请使用 Groq"},503);
+  const auth=req.headers.get("Authorization")||"";
+  if(!/^Bearer [A-Za-z0-9_-]{43}$/.test(auth))return json(req,{error:"请在共映设置中创建同步空间后再试"},401);
+  const owner=await sha256(auth.slice(7));
+  try {
+    const vault=await env.SYNC_DB.prepare("SELECT version FROM sync_vaults WHERE owner_hash=?").bind(owner).first();
+    if(!vault)return json(req,{error:"尚未初始化云同步空间，请先点击「立即同步」保存配对信息"},403);
+    const declared=Number(req.headers.get("Content-Length")||0);
+    if(declared>1_650_000)return json(req,{error:"单个音频分段太大，不能上传"},413);
+    const raw=await req.text();
+    if(raw.length>1_650_000)return json(req,{error:"单次音轨上限约 1MB"},413);
+    let data:{audio?:unknown;seconds?:unknown};
+    try{data=JSON.parse(raw) as typeof data;}catch{return json(req,{error:"音轨数据格式不正确"},400);}
+    const seconds=Number(data.seconds);
+    if(!Number.isSafeInteger(seconds)||seconds<1||seconds>75||
+      typeof data.audio!=="string"||data.audio.length<50||data.audio.length>1_500_000||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(data.audio))
+      return json(req,{error:"Cloudflare 单次转录只接受最多 75 秒的压缩音频"},400);
+    // Counters are reserved BEFORE the call. Errors do not reimburse the
+    // budget, avoiding repeated retries accidentally consuming money.
+    await env.SYNC_DB.prepare("CREATE TABLE IF NOT EXISTS transcribe_daily_usage (owner_hash TEXT NOT NULL,day TEXT NOT NULL,seconds INTEGER NOT NULL,PRIMARY KEY(owner_hash,day))").bind().run();
+    const day=new Date().toISOString().slice(0,10);
+    const global=await env.SYNC_DB.prepare("INSERT INTO transcribe_daily_usage(owner_hash,day,seconds) VALUES('__global__',?,?) ON CONFLICT(owner_hash,day) DO UPDATE SET seconds=seconds+excluded.seconds WHERE seconds+excluded.seconds<=7200").bind(day,seconds).run();
+    if(!(global.meta?.changes||0))return json(req,{error:"共映 Cloudflare 今日免费保护额度已满，请明天再试或使用 Groq"},429);
+    const own=await env.SYNC_DB.prepare("INSERT INTO transcribe_daily_usage(owner_hash,day,seconds) VALUES(?,?,?) ON CONFLICT(owner_hash,day) DO UPDATE SET seconds=seconds+excluded.seconds WHERE seconds+excluded.seconds<=3600").bind(owner,day,seconds).run();
+    if(!(own.meta?.changes||0))return json(req,{error:"你的 Cloudflare 每日保护额度已满，请明天再试"},429);
+    let result:unknown;
+    try{result=await env.AI.run("@cf/openai/whisper-large-v3-turbo",{audio:data.audio,task:"transcribe"});}
+    catch{return json(req,{error:"Cloudflare 识别服务暂不可用，本段未完成，可以稍后重试；不自动转入付费服务"},503);}
+    const object=result as {segments?:Array<{start?:unknown;end?:unknown;text?:unknown}>;text?:unknown}|null;
+    const segments=Array.isArray(object?.segments)?object!.segments!.filter(x=>
+      x&&Number.isFinite(x.start)&&Number.isFinite(x.end)&&typeof x.text==="string"&&x.text.trim())
+      .map(x=>({start:Number(x.start),end:Number(x.end),text:String(x.text).slice(0,1000)})).slice(0,500):[];
+    if(!segments.length)return json(req,{error:"Cloudflare 没有返回带时间戳的字幕，请改用 Groq 或重试"},422);
+    return json(req,{segments});
+  }catch{return json(req,{error:"转录服务暂时无法完成请求，请检查 D1 绑定和免费额度"},503);}
+}
+
 export default {
   async fetch(request:Request,env:Env):Promise<Response>{
     const u=new URL(request.url);
     if(u.pathname==="/api/sync/v1")return sync(request,env);
+    if(u.pathname==="/api/transcribe/v1")return transcribeAudio(request,env);
     if(u.pathname.startsWith("/api/"))return json(request,{error:"Not found"},404);
     return env.ASSETS.fetch(request);
   },
