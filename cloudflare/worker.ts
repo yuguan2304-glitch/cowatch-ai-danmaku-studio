@@ -133,11 +133,54 @@ async function transcribeAudio(req:Request,env:Env):Promise<Response>{
   }catch{return json(req,{error:"转录服务暂时无法完成请求，请检查 D1 绑定和免费额度"},503);}
 }
 
+/**
+ * First-party, allowlisted model delivery for browsers that cannot reach
+ * Hugging Face directly. No user API keys or audio are sent to this endpoint.
+ * Daily data caps prevent this optional feature from consuming unlimited
+ * Cloudflare resources.
+ */
+async function whisperModelAsset(req:Request,env:Env,path:string):Promise<Response>{
+  if(req.method!=="GET")return json(req,{error:"只允许读取模型资源"},405);
+  const prefix="/api/model/v1/onnx-community/whisper-tiny/resolve/main/";
+  if(!path.startsWith(prefix))return json(req,{error:"模型资源不在允许列表"},404);
+  const filename=path.slice(prefix.length);
+  if(!/^(?:[a-zA-Z0-9._-]+|onnx\/[a-zA-Z0-9._-]+)$/.test(filename)
+    || !/\.(?:json|onnx)$/.test(filename))return json(req,{error:"文件类型不支持"},404);
+  const origin=req.headers.get("Origin")||"";
+  if(origin && !allowedOrigins.has(origin))return json(req,{error:"当前来源不允许获取共映模型"},403);
+  const estimate=filename.endsWith(".onnx")?60_000_000:2_000_000;
+  // Reserve conservatively before fetching; no dependency on external billing.
+  try{
+    await env.SYNC_DB.prepare("CREATE TABLE IF NOT EXISTS model_daily_budget (owner_hash TEXT NOT NULL, day TEXT NOT NULL, bytes INTEGER NOT NULL, PRIMARY KEY(owner_hash,day))").run();
+    const day=new Date().toISOString().slice(0,10);
+    const ip=(req.headers.get("CF-Connecting-IP")||"unknown").slice(0,100);
+    const ipHash=await sha256("model-ip:"+ip);
+    const own=await env.SYNC_DB.prepare("INSERT INTO model_daily_budget(owner_hash,day,bytes) VALUES(?,?,?) ON CONFLICT(owner_hash,day) DO UPDATE SET bytes=bytes+excluded.bytes WHERE bytes+excluded.bytes<=260000000").bind(ipHash,day,estimate).run();
+    if(!(own.meta?.changes||0))return json(req,{error:"今日此设备模型下载保护额度已满，明天再试或选择其他下载来源"},429);
+    const all=await env.SYNC_DB.prepare("INSERT INTO model_daily_budget(owner_hash,day,bytes) VALUES('__global__',?,?) ON CONFLICT(owner_hash,day) DO UPDATE SET bytes=bytes+excluded.bytes WHERE bytes+excluded.bytes<=1000000000").bind(day,estimate).run();
+    if(!(all.meta?.changes||0))return json(req,{error:"共映模型下载保护额度已满，请明天再试"},429);
+  }catch{return json(req,{error:"模型下载额度校验暂不可用"},503);}
+  const url="https://huggingface.co/onnx-community/whisper-tiny/resolve/main/"+filename;
+  try{
+    const upstream=await fetch(url,{headers:{"User-Agent":"CoWatch-Model-Delivery/1.0"}});
+    if(!upstream.ok||!upstream.body)return json(req,{error:"模型源站暂不可用（HTTP "+upstream.status+"），可切换下载来源"},502);
+    const contentLength=Number(upstream.headers.get("Content-Length")||0);
+    if(contentLength>85_000_000)return json(req,{error:"模型文件超过共映当前的安全下载上限"},413);
+    const headers=new Headers({
+      "Content-Type":filename.endsWith(".json")?"application/json":"application/octet-stream",
+      "Cache-Control":"public, max-age=86400",
+      "X-Content-Type-Options":"nosniff",
+    });
+    if(allowedOrigins.has(origin))headers.set("Access-Control-Allow-Origin",origin);
+    return new Response(upstream.body,{status:200,headers});
+  }catch{return json(req,{error:"共映中转站也无法连接模型源站，请换网络或使用 Groq/Cloudflare 转录"},502);}
+}
 export default {
   async fetch(request:Request,env:Env):Promise<Response>{
     const u=new URL(request.url);
     if(u.pathname==="/api/sync/v1")return sync(request,env);
     if(u.pathname==="/api/transcribe/v1")return transcribeAudio(request,env);
+    if(u.pathname.startsWith("/api/model/v1/"))return whisperModelAsset(request,env,u.pathname);
     if(u.pathname.startsWith("/api/"))return json(request,{error:"Not found"},404);
     return env.ASSETS.fetch(request);
   },
