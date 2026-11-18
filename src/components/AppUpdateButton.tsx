@@ -19,7 +19,7 @@ export function AppUpdateButton(){
       const buildResponse=await fetch("/cowatch-build.json",{cache:"no-store"});
       if(!buildResponse.ok||!buildResponse.headers.get("content-type")?.includes("json"))return;
       const build=await buildResponse.json() as {platform?:string;build?:number;package?:string};
-      if(build.platform!=="android"||build.package!=="dev.cowatch.player.alpha.stable2026"||!Number.isInteger(build.build))return;
+      if(build.platform!=="android"||build.package!=="dev.cowatch.player.alpha.autoupdate"||!Number.isInteger(build.build))return;
       setInstalled(build.build!);
       const response=await fetch(LATEST,{cache:"no-store",headers:{"Accept":"application/vnd.github+json"}});
       if(!response.ok)throw Error("暂时无法连接 GitHub 查询更新");
