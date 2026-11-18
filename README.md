@@ -5,7 +5,7 @@
 **当前状态：公开测试版（Alpha）。欢迎反馈，功能可能变更。**
 
 - 🌐 **网页版：** https://cowatch-ai-danmaku-studio.yuguan2304.workers.dev/
-- 📱 **Android 测试版安装包：** [查看 GitHub Releases](https://github.com/yuguan2304-glitch/cowatch-ai-danmaku-studio/releases)
+- 📱 **Android Alpha 测试版：** [查看 GitHub Releases](https://github.com/yuguan2304-glitch/cowatch-ai-danmaku-studio/releases)（文件名含 `alpha-preview` 的版本内置启动界面，可与旧版本并存）
 - 🔒 **隐私说明：** [PRIVACY.md](PRIVACY.md)
 - 📦 **正式签名 APK 发布流程：** [docs/ANDROID_RELEASE.md](docs/ANDROID_RELEASE.md)
 - 🛡️ **公开前安全核对：** [SECURITY.md](SECURITY.md)
@@ -71,3 +71,12 @@ Android 工程位于 `android/`；仓库的 GitHub Actions 可构建测试 APK�
 **开源代码可供阅读和协作。** 当前仓库尚未明确选定源代码许可协议；在添加许可证之前，不应假定所有代码、第三方素材或品牌元素都可自由复制、修改和再分发。
 
 问题反馈请使用 GitHub Issues，避免在 Issue 中张贴 API 密钥、私人视频或其他敏感信息。
+
+
+## ☁️ PC / Android 自动同步（Alpha）
+
+- 「共映设置」→「多设备自动同步」：同一邮箱登录后，电脑与手机在前台每约 30 秒合并并保存弹幕、字幕、观众设定和放映收藏等元数据。
+- 此功能需要云端 Supabase 项目的 URL、**公开** publishable/anon key、邮箱 OTP 和 `public.cowatch_sync` 数据表。仓库附带 [数据库安全配置 SQL](docs/SUPABASE_CLOUD_SYNC.sql)。在公共云配置完成前，界面里的登录同步无法直接使用。
+- 不上传原视频文件、AI 密钥、私密中转站地址；视频须按设备单独选择或导入完整放映包。
+- 两端同时修改同一条内容时可能存在覆盖风险，尚不支持跨设备删除同步；重要记录仍建议备份。
+- 旧在线 WebView 版本随在线网站更新后可通过登录同步历史记录；旧的内置页面 APK 无法直接读取新版独立 App 的沙盒，必须先从旧版导出 `.cowatch` 放映包做一次迁移。**不要清除或卸载旧版**，直至核实数据已迁出。
