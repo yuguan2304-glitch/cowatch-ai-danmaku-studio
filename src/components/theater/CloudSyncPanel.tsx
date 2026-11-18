@@ -42,9 +42,20 @@ export function CloudSyncPanel() {
     };
     void tick();
     const timer=window.setInterval(()=>void tick(),30000);
+    let changeTimer:ReturnType<typeof setTimeout>|undefined;
+    const changed=()=>{
+      if(changeTimer)clearTimeout(changeTimer);
+      changeTimer=setTimeout(()=>void tick(),2500);
+    };
     const visible=()=>{if(document.visibilityState==="visible")void tick();};
     document.addEventListener("visibilitychange",visible);
-    return ()=>{clearInterval(timer);document.removeEventListener("visibilitychange",visible);};
+    window.addEventListener("cowatch:local-data-changed",changed);
+    return ()=>{
+      clearInterval(timer);
+      if(changeTimer)clearTimeout(changeTimer);
+      document.removeEventListener("visibilitychange",visible);
+      window.removeEventListener("cowatch:local-data-changed",changed);
+    };
   },[active,signedIn]);
   const submitCode=async()=>{
     setBusy(true);
