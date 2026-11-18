@@ -23,13 +23,13 @@ export function TranslationPanel(){
  const [transcriptionProgress,setTranscriptionProgress]=useState("");
  const [localModelCheck,setLocalModelCheck]=useState("");
  const [checkingModel,setCheckingModel]=useState(false);
- const [modelSource,setModelSource]=useState<"official"|"mirror"|"custom">(()=>{
-   try {const v=localStorage.getItem("cowatch:whisper-model-source:v1");return v==="mirror"||v==="custom"?v:"official";}catch{return "official";}
+ const [modelSource,setModelSource]=useState<"cowatch"|"official"|"mirror"|"custom">(()=>{
+   try {const v=localStorage.getItem("cowatch:whisper-model-source:v1");return v==="official"||v==="mirror"||v==="custom"?v:"cowatch";}catch{return "official";}
  });
  const [customModelHost,setCustomModelHost]=useState(()=>{
    try{return localStorage.getItem("cowatch:whisper-model-host:v1")||"";}catch{return "";}
  });
- const modelHost=modelSource==="official"?"https://huggingface.co":modelSource==="mirror"?"https://hf-mirror.com":customModelHost.trim().replace(/\/+$/,"");
+ const modelHost=modelSource==="cowatch"?"https://cowatch-ai-danmaku-studio.yuguan2304.workers.dev/api/model/v1/":modelSource==="official"?"https://huggingface.co":modelSource==="mirror"?"https://hf-mirror.com":customModelHost.trim().replace(/\/+$/,"");
  useEffect(()=>{
    try {localStorage.setItem("cowatch:whisper-model-source:v1",modelSource);localStorage.setItem("cowatch:whisper-model-host:v1",customModelHost);}catch{/* local settings unavailable */}
  },[modelSource,customModelHost]);
@@ -147,8 +147,8 @@ export function TranslationPanel(){
    let url: string;
    try {
      const host=new URL(modelHost);
-     if(host.protocol!=="https:"||host.username||host.password||host.search||host.hash||host.pathname!=="/")throw new Error("请选择有效的 HTTPS 模型下载域名");
-     url=host.origin+"/onnx-community/whisper-tiny/resolve/main/config.json";
+     if(host.protocol!=="https:"||host.username||host.password||host.search||host.hash||(host.pathname!=="/"&&host.pathname!=="/api/model/v1/"))throw new Error("请选择有效的 HTTPS 模型下载地址");
+     url=host.origin+(host.pathname==="/api/model/v1/"?host.pathname:"/")+"onnx-community/whisper-tiny/resolve/main/config.json";
    }catch{setLocalModelCheck("模型下载地址无效：请填写 https:// 开头的域名，不要包含具体文件路径。");return;}
 
    setCheckingModel(true);
@@ -171,7 +171,7 @@ export function TranslationPanel(){
    setLocalError("");
    try {
      const host=new URL(modelHost);
-     if(host.protocol!=="https:"||host.username||host.password||host.search||host.hash||host.pathname!=="/")throw new Error();
+     if(host.protocol!=="https:"||host.username||host.password||host.search||host.hash||(host.pathname!=="/"&&host.pathname!=="/api/model/v1/"))throw new Error();
    }catch{toast.error("请先选择有效的 HTTPS 模型下载域名");return;}
    const file = source.file;
    if(!file){toast.error("请先打开本地视频");return;}
@@ -301,14 +301,14 @@ export function TranslationPanel(){
        <Button size="sm" variant="outline" disabled={busy||source.kind!=="file"} onClick={()=>void localTranscribe(true)}>免费识别整段视频</Button>
      </div>
      <label className="block text-xs space-y-1">模型下载来源
-       <select className="w-full rounded border bg-background p-2" value={modelSource} disabled={busy||checkingModel} onChange={e=>{setModelSource(e.target.value as typeof modelSource);setLocalModelCheck("");}}>
+       <select className="w-full rounded border bg-background p-2" value={modelSource} disabled={busy||checkingModel} onChange={e=>{setModelSource(e.target.value as typeof modelSource);setLocalModelCheck("");}}>\n         <option value="cowatch">共映模型下载通道（推荐，带流量保护）</option>
          <option value="official">Hugging Face 官方（huggingface.co）</option>
          <option value="mirror">HF Mirror（hf-mirror.com，可能不支持浏览器跨域）</option>
          <option value="custom">自定义 HTTPS 模型镜像地址</option>
        </select>
      </label>
      {modelSource==="custom"&&<Input placeholder="https://你的模型镜像域名" value={customModelHost} disabled={busy||checkingModel} onChange={e=>{setCustomModelHost(e.target.value);setLocalModelCheck("");}}/>}
-     <p className="text-xs text-muted-foreground">当前下载域名：{modelHost||"未配置"}。仅向所选模型来源请求文件，不会自动切换第三方站；使用第三方来源前请确认可信度与跨域支持。</p>
+     <p className="text-xs text-muted-foreground">当前下载地址：{modelHost||"未配置"}。共映通道只转发公开的 Whisper 模型文件，并有限额保护；其他模式直接向所选模型来源请求文件，不会自动切换第三方站；使用第三方来源前请确认可信度与跨域支持。</p>
      <Button size="sm" variant="ghost" disabled={busy||checkingModel} onClick={()=>void checkLocalModelAccess()}>{checkingModel?"检测中…":"检测模型下载连接（免费、小流量）"}</Button>
      {localModelCheck&&<p role="status" className="rounded border border-border p-2 text-xs break-words">{localModelCheck}</p>}
      {localError&&<p role="alert" className="rounded border border-destructive/40 p-2 text-xs break-words">上次识别失败：{localError}。若是模型下载失败，可先点击上方连接检测。已下载的部分资源可能留在浏览器缓存中。</p>}
