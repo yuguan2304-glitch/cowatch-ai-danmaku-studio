@@ -24,6 +24,7 @@ import { SavedTheater } from "@/components/theater/SavedTheater";
 import { CloudSyncPanel } from "@/components/theater/CloudSyncPanel";
 import { ShipControls } from "@/components/theater/ShipControls";
 import { WorldBookImport } from "@/components/theater/WorldBookImport";
+import { AudiencePresets } from "@/components/theater/AudiencePresets";
 
 export const Route = createFileRoute("/")({ component: Index });
 export function Index() {
@@ -57,7 +58,7 @@ export function Index() {
     catch(e){const message=e instanceof Error?e.message:String(e);setTestResult(message);toast.error("测试失败，请查看下方错误详情");}finally{setTesting(false);}
   };
   return <main className="mx-auto max-w-[1440px] space-y-4 p-3 sm:p-6">
-    <div><h1 className="font-display text-2xl font-bold">AI 弹幕放映室</h1><p className="text-sm text-muted-foreground">选一部视频，邀请你的虚拟观众。所有 AI 弹幕均为模拟内容。</p></div>
+    <div><h1 className="font-display text-2xl font-bold">AI 弹幕放映室</h1><p className="text-sm text-muted-foreground">游戏实况、动漫、影视、综艺、纪录片、原创视频……选一部视频，邀请你的虚拟观众。所有弹幕均为 AI 模拟，不是真实网友评论。</p></div>
     <div className="space-y-4">
       <div className="min-w-0 space-y-3"><SourceBar/><div id="cowatch-player-top"><Player/></div><CommentSection/><SavedTheater/>
       </div>
@@ -76,13 +77,13 @@ export function Index() {
         </details>
 
           <fieldset disabled={s.generating} className="min-w-0 space-y-3">
-        <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🔑 AI 接口设置</summary><p className="text-xs text-muted-foreground">使用你自己的 API 额度。默认每次刷新后清除密钥与中转站地址；只有明确勾选「记住」才保存在本设备。内容仅发送至所选服务商。</p><p className="truncate text-xs text-muted-foreground" title={p.model}>当前模型：{p.model || "未选择"}</p>
+        <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🔑 AI 接口设置</summary><p className="text-xs text-muted-foreground">每位使用者自备 API 额度，站主不承担任何 AI 费用。密钥只保存在当前页面内存，刷新或关闭即清除，不会写入链接、日志或本机存储；内容仅发送至你选择的服务商。</p><p className="truncate text-xs text-muted-foreground" title={p.model}>当前模型：{p.model || "未选择"}</p>
           <div className="flex flex-wrap gap-1">{PROVIDER_PRESETS.map(x=><Button key={x.label} size="sm" variant="outline" onClick={()=>{setKey("");s.update("provider",{kind:x.kind,baseUrl:x.baseUrl,model:x.model});}}>{x.label}</Button>)}</div>
           <label className="block text-sm">接口类型 <select className="w-full rounded border bg-background p-2" value={p.kind} onChange={e=>{setKey("");s.update("provider",{kind:e.target.value==="gemini"?"gemini":"openai"});}}><option value="openai">OpenAI 兼容</option><option value="gemini">Gemini 原生</option></select></label>
           <label className="block text-sm">API 地址<Input value={p.baseUrl} onChange={e=>{setKey("");s.update("provider",{baseUrl:e.target.value});}}/></label>
           <ModelPicker kind={p.kind} baseUrl={p.baseUrl} apiKey={key} model={p.model} onModelChange={model=>s.update("provider",{model})}/>
           <label className="block text-sm">API 密钥<Input type="password" name="cowatch-temp-api-secret" autoComplete="new-password" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
-          <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={rememberKey} onChange={e=>setRememberKey(e.target.checked)}/> <span>记住此设备上的密钥与中转站地址（可选）<span className="block text-xs text-muted-foreground">默认不记住，刷新后地址会恢复官方预设、密钥会清空。勾选后密钥及中转站地址会保存在此浏览器中（未加密），请勿在共享设备启用。</span></span></label>
+          <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={rememberKey} onChange={e=>setRememberKey(e.target.checked)}/> <span>记住此设备上的中转站地址（可选，不含密钥）<span className="block text-xs text-muted-foreground">仅保存接口地址；API 密钥永远不会被保存，刷新后需重新填写。请勿在共享设备启用。</span></span></label>
           <Button size="sm" variant="outline" type="button" onClick={()=>{clearKeys();setTestResult("");s.update("provider",{baseUrl:"https://api.openai.com/v1",transcribeBaseUrl:"https://api.openai.com/v1"});toast.success("已清除密钥与记住的中转站地址");}}>清除密钥和地址</Button>
           {p.kind==="gemini"?<label className="block text-sm">输入方式 <select className="w-full rounded border bg-background p-2" value={p.geminiInput} onChange={e=>s.update("provider",{geminiInput:e.target.value==="video"?"video":"frames"})}><option value="frames">抽帧</option><option value="video">原生视频（小文件）</option></select></label>:<label className="flex gap-2 text-sm"><input type="checkbox" checked={p.jsonMode} onChange={e=>s.update("provider",{jsonMode:e.target.checked})}/>要求 JSON 模式</label>}
           <Button disabled={testing} onClick={()=>void test()}>{testing?"测试中…":"测试连接"}</Button>
@@ -90,7 +91,7 @@ export function Index() {
           <p className="text-xs text-muted-foreground">注意：模型列表和测试连接是两种不同请求。部分中转站拒绝浏览器跨域（CORS），即使 API 密钥正常也可能无法直接调用。不要将密钥填到不可信的中转网站；本站不会将密钥发送到共映服务器。</p>
           <details className="space-y-2 text-sm"><summary>音轨转录接口（可选）</summary><label>地址<Input value={p.transcribeBaseUrl} onChange={e=>{setTranscribeKey("");s.update("provider",{transcribeBaseUrl:e.target.value,transcribeUseMainKey:false});}}/></label><label>模型<Input value={p.transcribeModel} onChange={e=>s.update("provider",{transcribeModel:e.target.value})}/></label><label className="flex gap-2"><input type="checkbox" checked={p.transcribeUseMainKey} onChange={e=>s.update("provider",{transcribeUseMainKey:e.target.checked})}/>明确授权复用主密钥</label>{!p.transcribeUseMainKey&&<Input type="password" aria-label="转录密钥" value={transcribeKey} onChange={e=>setTranscribeKey(e.target.value)}/>}</details>
         </details>
-        <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🎭 虚拟观众</summary><p className="text-sm">语言（多选）</p><div className="flex flex-wrap gap-1">{LANGUAGES.map(x=><Button key={x.id} size="sm" variant={a.languages.includes(x.id)?"default":"outline"} onClick={()=>s.update("audience",{languages:a.languages.includes(x.id)?a.languages.filter(y=>y!==x.id):[...a.languages,x.id]})}>{x.label}</Button>)}</div>
+        <details className="panel space-y-3 p-3"><summary className="cursor-pointer font-bold">🎭 虚拟观众与预设</summary><AudiencePresets/><p className="text-sm">语言（多选）</p><div className="flex flex-wrap gap-1">{LANGUAGES.map(x=><Button key={x.id} size="sm" variant={a.languages.includes(x.id)?"default":"outline"} onClick={()=>s.update("audience",{languages:a.languages.includes(x.id)?a.languages.filter(y=>y!==x.id):[...a.languages,x.id]})}>{x.label}</Button>)}</div>
           <p className="text-sm">观众类型（多选）</p><div className="flex flex-wrap gap-1">{IDENTITIES.map(x=><Button key={x.id} size="sm" title={x.desc} variant={a.identities[x.id]?"default":"outline"} onClick={()=>toggleWeight("identities",x.id)}>{x.label}</Button>)}</div>
           {Boolean(a.identities["shipper"]) && <ShipControls/>}
           <p className="text-sm">语气（多选）</p><div className="flex flex-wrap gap-1">{TONES.map(x=><Button key={x.id} size="sm" variant={a.tones[x.id]?"default":"outline"} onClick={()=>toggleWeight("tones",x.id)}>{x.label}</Button>)}</div>
@@ -110,7 +111,7 @@ export function Index() {
             <WorldBookImport/>
             <p className="text-xs text-muted-foreground">世界书只在这台设备保存，不同步到其他设备。导入的内容可能发送给你选择的 AI API 服务商。请勿放入私人密码或 API 密钥。</p>
           </details>
-          <label className="block text-sm">额外要求（人物、圈内梗、偏好）<Textarea value={a.extraPrompt} onChange={e=>s.update("audience",{extraPrompt:e.target.value})}/></label>
+          <label className="block text-sm">作品名 / 关注对象 / 角色关系 / 圈内术语（可选，自行填写）<Textarea value={a.extraPrompt} onChange={e=>s.update("audience",{extraPrompt:e.target.value})}/></label>
           <label className="block text-sm">屏蔽词<Input value={a.globalBannedWords} onChange={e=>s.update("audience",{globalBannedWords:e.target.value})}/></label>
           <label className="flex gap-2 text-sm"><input type="checkbox" checked={a.interaction} onChange={e=>s.update("audience",{interaction:e.target.checked})}/>允许观众互动</label>
         </details>

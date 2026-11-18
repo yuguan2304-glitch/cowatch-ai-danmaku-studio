@@ -6,7 +6,7 @@ const TEXTS = [
   "这里截图当壁纸", "awsl", "前方高能", "名场面预定", "好家伙", "这配色绝了", "我又来了", "打卡",
   "镜头好稳", "笑死", "这里可以", "太可爱了吧", "构图满分", "冲冲冲", "已三连", "正片开始",
 ];
-const VIEWERS = ["演示·粉丝", "演示·乐子人", "演示·磕学家"];
+const VIEWERS = ["演示·路人", "演示·乐子人", "演示·技术党"];
 const COLORS = ["#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFD302", "#89D5FF", "#FF8FC8"];
 
 /** Clearly-labeled sample danmaku for trying the player. NOT AI analysis. */

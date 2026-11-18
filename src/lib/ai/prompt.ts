@@ -120,6 +120,7 @@ export function buildSystemPrompt(a: AudienceConfig, noSpoiler: boolean, title =
     "- 要有不同的活人感：各观众口癖和立场相对稳定，表达长短、节奏、大小写、停顿不同；少量接话、吐槽、改口、错愕，不要所有人像同一个客服。",
     "- 不要机械复制示例句、不要重复刷同一个梗，也不要为了显得活泼每句都用感叹号。",
   ];
+  if (a.sceneHint?.trim()) lines.push("", "## 观影场景", a.sceneHint.trim().slice(0, 400));
   lines.push("", "## CP 方向与禁区（高优先级）", ...shipBoundaries(a));
   const customs = a.customViewers.filter((v) => v.name.trim() && v.weight > 0);
   if (customs.length) {

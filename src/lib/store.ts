@@ -127,9 +127,8 @@ export const useApp = create<AppState>((set) => ({
 }));
 
 /**
- * API keys are memory-only by default. Persistent storage is strictly opt-in.
- * When opted in, the key is stored unencrypted in localStorage ON THIS DEVICE.
- * Never include keys in IndexedDB settings/history or share links.
+ * API keys live in session memory only — never localStorage, IndexedDB, links or logs.
+ * The optional "remember" flag only keeps provider ADDRESSES (no key) on this device.
  */
 const SECRET_STORAGE = "cowatch:remembered-api-key:v1";
 const REMEMBER_STORAGE = "cowatch:remember-api-key:v1";
@@ -163,17 +162,17 @@ export function syncRememberedProviderAddresses() {
 function rememberedSecrets(): { apiKey: string; rememberKey: boolean } {
   if (typeof window === "undefined") return { apiKey: "", rememberKey: false };
   try {
-    const rememberKey = localStorage.getItem(REMEMBER_STORAGE) === "yes";
-    return { rememberKey, apiKey: rememberKey ? (localStorage.getItem(SECRET_STORAGE) ?? "") : "" };
+    // Older versions could persist the key; wipe it so keys stay session-only.
+    localStorage.removeItem(SECRET_STORAGE);
+    return { rememberKey: localStorage.getItem(REMEMBER_STORAGE) === "yes", apiKey: "" };
   } catch { return { apiKey: "", rememberKey: false }; }
 }
-function persistSecret(key: string, remember: boolean) {
+function persistSecret(_key: string, remember: boolean) {
   if (typeof window === "undefined") return;
   try {
+    localStorage.removeItem(SECRET_STORAGE);
     if (remember) {
       localStorage.setItem(REMEMBER_STORAGE, "yes");
-      if (key) localStorage.setItem(SECRET_STORAGE, key);
-      else localStorage.removeItem(SECRET_STORAGE);
     } else {
       localStorage.removeItem(REMEMBER_STORAGE);
       localStorage.removeItem(SECRET_STORAGE);

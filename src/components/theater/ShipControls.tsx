@@ -39,7 +39,7 @@ export function ShipControls() {
     toast.success("旧版 CP 已转换成独立规则，请核对左右方向");
   };
   return <div className="space-y-3 rounded-lg border border-primary/30 bg-secondary/30 p-3">
-    <p className="text-sm font-bold">💞 CP 偏好 · 固定左右 / 杂食无差</p>
+    <p className="text-sm font-bold">💞 CP 偏好（可选模式）· 固定左右 / 杂食无差</p>
     <p className="text-xs text-muted-foreground">固定左右：左边攻、右边受，禁止逆 CP。无差杂食：只要是这两个人，顺序可互换。每一组 CP 单独选择，未列出的组合不允许主动拉郎。优先遵守下方的屏蔽 CP。</p>
     <div className="grid grid-cols-2 gap-2">
       <label className="text-xs">攻（左） / 角色 A<Input disabled={disabled} placeholder="角色 A" value={left} onChange={e=>setLeft(e.target.value)}/></label>

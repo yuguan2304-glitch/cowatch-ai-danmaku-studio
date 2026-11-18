@@ -13,6 +13,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SiteHeader } from "@/components/SiteHeader";
+import { WelcomeDialog } from "@/components/WelcomeDialog";
 import { Toaster } from "@/components/ui/sonner";
 import { useBootstrapSettings } from "@/lib/use-bootstrap";
 
@@ -83,9 +84,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "theme-color", content: "#141110" },
       { title: "共映 CoWatch｜AI弹幕放映室" },
-      { name: "description", content: "用你自己的 AI 接口为本地视频生成实时滚动弹幕，密钥只留在浏览器内存。" },
+      { name: "description", content: "面向所有兴趣圈层的 AI 模拟弹幕观影工具：自备 API 密钥，视频与数据留在本机。" },
       { property: "og:title", content: "共映 CoWatch｜AI弹幕放映室" },
-      { property: "og:description", content: "用你自己的 AI 接口为本地视频生成实时滚动弹幕。" },
+      { property: "og:description", content: "游戏实况、动漫、影视、综艺、纪录片都能用的 AI 模拟弹幕观影工具。" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -134,6 +135,7 @@ function RootComponent() {
         <SiteHeader />
         <Outlet />
       </div>
+      <WelcomeDialog />
       <Toaster position="top-center" richColors />
     </QueryClientProvider>
   );

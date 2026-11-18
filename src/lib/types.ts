@@ -41,6 +41,8 @@ export type AudienceConfig = {
   shipPairs?: string;
   /** Pairings users do not want mentioned. */
   blockedPairs?: string;
+  /** Neutral viewing-scene guidance from a built-in preset (game, anime, documentary…). */
+  sceneHint?: string;
 };
 
 export type ProviderKind = "openai" | "gemini";

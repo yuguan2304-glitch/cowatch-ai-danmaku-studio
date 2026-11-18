@@ -61,7 +61,7 @@ export function CloudSyncPanel() {
   return <details className="panel space-y-2 p-3" id="cowatch-cloud-sync">
     <summary className="cursor-pointer font-bold">☁️ 多设备自动同步（测试版）</summary>
     <div className="space-y-2 pt-2 text-sm">
-      <p className="text-xs text-muted-foreground">连接同一云端账户后，PC 和手机在前台每 30 秒检查并合并弹幕、字幕、观众偏好和收藏记录；打开 App 也会检查。视频原文件和 API 密钥不会上传。需要管理员先启用同步数据库。</p>
+      <p className="text-xs text-muted-foreground">连接同一云端账户后，PC 和手机在前台每 30 秒检查并合并弹幕、字幕、观众偏好和收藏记录；打开 App 也会检查。视频原文件和 API 密钥不会上传。需要使用<b>你自己的</b>云端项目和账户——共映不提供共享账号，也不替你保管数据。</p>
       <label className="block">Supabase 项目 URL
         <Input value={config.url} placeholder="https://xxxxx.supabase.co" disabled={busy||signedIn} onChange={e=>change({url:e.target.value.trim()})}/>
       </label>

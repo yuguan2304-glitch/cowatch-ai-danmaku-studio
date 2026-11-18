@@ -1,9 +1,9 @@
 import type { AudienceConfig, Settings } from "./types";
 
 export const IDENTITIES = [
-  { id: "fan", label: "粉丝", desc: "支持角色/创作者，夸夸、应援、护主" },
+  { id: "fan", label: "粉丝", desc: "（可选模式）支持视频里的人物或创作者，夸夸、应援" },
   { id: "fun", label: "乐子人", desc: "看热闹、抓笑点、整活" },
-  { id: "shipper", label: "磕学家", desc: "关注人物关系与互动，嗑CP" },
+  { id: "shipper", label: "磕学家", desc: "（可选模式）关注人物互动；只嗑你明确填写的组合" },
   { id: "tech", label: "技术党", desc: "关注镜头、剪辑、画质、制作细节" },
   { id: "passerby", label: "路人", desc: "第一次看，直观反应和提问" },
   { id: "veteran", label: "老粉", desc: "熟悉过往内容，怀旧、对比、科普梗" },
@@ -54,7 +54,7 @@ export const DANMAKU_COLORS = [
 export function defaultAudience(): AudienceConfig {
   return {
     languages: ["zh-Hans"],
-    identities: { fan: 40, fun: 35, shipper: 25 },
+    identities: { passerby: 40, fun: 35, tech: 25 },
     tones: { lively: 50, meme: 50 },
     customViewers: [],
     interaction: true,
@@ -66,6 +66,7 @@ export function defaultAudience(): AudienceConfig {
     shipRules: [],
     shipPairs: "",
     blockedPairs: "",
+    sceneHint: "",
   };
 }
 
