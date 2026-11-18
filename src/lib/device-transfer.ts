@@ -59,23 +59,23 @@ function objectArray(value: unknown, label: string): Record<string, unknown>[] {
 function validate(input: unknown): DeviceTransfer {
   if (!input || typeof input !== "object") throw new Error("文件不是共映设备迁移包");
   const value = input as Record<string, unknown>;
-  if (value.format !== FORMAT || value.version !== 1) throw new Error("设备迁移包格式或版本不兼容");
-  if (!value.settings || typeof value.settings !== "object" || Array.isArray(value.settings)) throw new Error("缺少设置");
-  const history = objectArray(value.history, "生成历史");
-  const presets = objectArray(value.presets, "观众预设");
-  const screenings = objectArray(value.screenings, "放映收藏");
+  if (value['format'] !== FORMAT || value['version'] !== 1) throw new Error("设备迁移包格式或版本不兼容");
+  if (!value['settings'] || typeof value['settings'] !== "object" || Array.isArray(value['settings'])) throw new Error("缺少设置");
+  const history = objectArray(value['history'], "生成历史");
+  const presets = objectArray(value['presets'], "观众预设");
+  const screenings = objectArray(value['screenings'], "放映收藏");
   for (const item of [...history, ...presets, ...screenings]) {
-    if (typeof item.id !== "string" || item.id.length < 1 || item.id.length > 150) throw new Error("存在无效记录编号");
+    if (typeof item['id'] !== "string" || item['id'].length < 1 || item['id'].length > 150) throw new Error("存在无效记录编号");
   }
   for (const item of history) {
-    if (!Array.isArray(item.danmaku) || !item.settings || typeof item.title !== "string") throw new Error("生成历史记录不完整");
+    if (!Array.isArray(item['danmaku']) || !item['settings'] || typeof item['title'] !== "string") throw new Error("生成历史记录不完整");
   }
   for (const item of presets) {
-    if (!item.audience || typeof item.name !== "string") throw new Error("观众预设不完整");
+    if (!item['audience'] || typeof item['name'] !== "string") throw new Error("观众预设不完整");
   }
   for (const item of screenings) {
-    if (!Array.isArray(item.danmaku) || !Array.isArray(item.cues) || !Array.isArray(item.comments)
-      || typeof item.title !== "string" || !["file","url","youtube","bilibili"].includes(String(item.sourceKind)))
+    if (!Array.isArray(item['danmaku']) || !Array.isArray(item['cues']) || !Array.isArray(item['comments'])
+      || typeof item['title'] !== "string" || !["file","url","youtube","bilibili"].includes(String(item['sourceKind'])))
       throw new Error("收藏记录不完整");
     if ("file" in item) throw new Error("迁移包不能包含嵌入的视频文件");
   }
