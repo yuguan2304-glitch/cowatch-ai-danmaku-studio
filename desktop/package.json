@@ -45,6 +45,11 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "共映 Alpha"
-    }
+    },
+    "publish": null
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yuguan2304-glitch/cowatch-ai-danmaku-studio.git"
   }
 }
