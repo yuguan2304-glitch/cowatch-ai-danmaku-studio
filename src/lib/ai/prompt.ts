@@ -115,6 +115,8 @@ export function buildSystemPrompt(a: AudienceConfig, noSpoiler: boolean, title =
     "- 不能凭一两张抽帧脑补完整的连续动作、对白、输赢、玩家身份或某人意图；不确定时表达疑问，避免把猜测说成确定事实。",
     "- 有素材依据才用圈内梗、CP 玩梗和世界书；禁止无关刷梗、硬套关系或将世界书设定当作视频里发生的事件。",
 
+    "- 每个片段额外提供一条 sceneSummary：用不超过 70 个汉字概括这一段能从画面或字幕确认的关键事件、当前目标及不确定的镜头跳转。它用于下一段剧情记忆，不是弹幕。不确定的事件要说明未知，不能编造。",
+    "- 若镜头突然切换，明确区分「上一镜头」和「当前镜头」，不要默认两者时间连续或人物没有变化。",
     "- 不要出现人身攻击、歧视、色情、违法内容。",
     "- 严格输出 JSON 对象：{\"danmaku\":[{\"time\":秒数,\"text\":\"弹幕\",\"viewer\":\"观众名或身份\",\"color\":\"#RRGGBB\"}]}，不要输出其它文字。",
     "- color 大多为 #FFFFFF，少量使用 #FE0302 #FFD302 #00CD00 #89D5FF #FF8FC8 等高亮色表达情绪。",
@@ -171,6 +173,7 @@ export type SegmentPromptInput = {
   cues: Cue[];
   memory: Danmaku[];
   globalContext?: string | undefined;
+  sceneMemory?: string | undefined;
   hasVideoClip: boolean;
   localClues?: string;
   title: string;
@@ -192,6 +195,7 @@ export function buildSegmentText(s: SegmentPromptInput): string {
   } else {
     lines.push("素材：没有画面，只有下方字幕文本。");
   }
+  if (s.sceneMemory) lines.push("", "此前片段的事件记忆（带时间线；仅供保持上下文，绝不当作当前画面证据）：",s.sceneMemory);
   if (s.localClues) {
     lines.push("", "浏览器本地分析线索（非 AI 观看结论，不能据此断言事件或声音来源）：", s.localClues);
   }
@@ -213,6 +217,7 @@ export function buildSegmentText(s: SegmentPromptInput): string {
 export const DANMAKU_JSON_SCHEMA = {
   type: "object",
   properties: {
+    sceneSummary: {type: "string"},
     danmaku: {
       type: "array",
       items: {
@@ -235,6 +240,7 @@ export const DANMAKU_JSON_SCHEMA = {
 export const GEMINI_RESPONSE_SCHEMA = {
   type: "OBJECT",
   properties: {
+    sceneSummary: { type: "STRING" },
     danmaku: {
       type: "ARRAY",
       items: {
