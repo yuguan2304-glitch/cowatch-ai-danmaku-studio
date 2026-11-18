@@ -11,6 +11,7 @@ type SubtitleDisplayState = {
   setMode(mode: SubtitleDisplayMode): void;
   setTranslated(translated: Record<number, string>): void;
   mergeTranslated(translated: Record<number, string>): void;
+  removeTranslated(indices: number[]): void;
 };
 
 const readSize=(name:string,defaultSize:number)=>{
@@ -29,4 +30,5 @@ export const useSubtitleDisplay = create<SubtitleDisplayState>((set) => ({
   setMode: (mode) => set({ mode }),
   setTranslated: (translated) => set({ translated }),
   mergeTranslated: (translated) => set((state) => ({ translated: { ...state.translated, ...translated } })),
+  removeTranslated: (indices) => set((state) => ({translated: Object.fromEntries(Object.entries(state.translated).filter(([k])=>!indices.includes(Number(k))))})),
 }));
