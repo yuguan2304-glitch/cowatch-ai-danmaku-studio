@@ -27,6 +27,28 @@ export function normalizeText(t: string): string {
     .trim();
 }
 
+/**
+ * Conservative near-duplicate detection. Only compare reasonably long
+ * comments; short authentic reactions (e.g. "啊？") are allowed.
+ * Runs locally without calling AI or consuming API tokens.
+ */
+function tooSimilar(a:string,b:string):boolean {
+  if(a===b)return true;
+  if(a.length<9||b.length<9)return false;
+  if(Math.min(a.length,b.length)/Math.max(a.length,b.length)<0.72)return false;
+  if(a.includes(b)||b.includes(a))return true;
+  const grams=(text:string)=>{
+    const out=new Set<string>();
+    for(let i=0;i<text.length-1;i++)out.add(text.slice(i,i+2));
+    return out;
+  };
+  const x=grams(a),y=grams(b);
+  let overlap=0;
+  for(const item of x)if(y.has(item))overlap++;
+  const similarity=overlap/(x.size+y.size-overlap);
+  return similarity>=0.84;
+}
+
 function toSeconds(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string") {
@@ -67,7 +89,8 @@ export function validateDanmaku(raw: unknown, opts: ValidateOptions): ValidateRe
     const arr = obj["danmaku"] ?? obj["comments"] ?? obj["items"] ?? obj["data"];
     if (Array.isArray(arr)) list = arr;
   }
-  const seen = new Set(opts.existing.map((d) => normalizeText(d.text)));
+  const seen = new Set(opts.existing.slice(-250).map((d) => normalizeText(d.text)));
+  const priorTexts = Array.from(seen);
   const banned = opts.bannedWords.map((w) => w.trim().toLowerCase()).filter(Boolean);
   const items: Danmaku[] = [];
   for (const entry of list) {
@@ -92,7 +115,7 @@ export function validateDanmaku(raw: unknown, opts: ValidateOptions): ValidateRe
       continue;
     }
     const norm = normalizeText(text);
-    if (!norm || seen.has(norm)) {
+    if (!norm || seen.has(norm) || priorTexts.some(previous=>tooSimilar(previous,norm))) {
       rejected.duplicate++;
       continue;
     }
@@ -101,6 +124,7 @@ export function validateDanmaku(raw: unknown, opts: ValidateOptions): ValidateRe
       continue;
     }
     seen.add(norm);
+    priorTexts.push(norm);
     const color = typeof e["color"] === "string" && HEX.test(e["color"].trim()) ? e["color"].trim().toUpperCase() : "#FFFFFF";
     const viewer = typeof e["viewer"] === "string" && e["viewer"].trim() ? e["viewer"].trim().slice(0, 24) : "路人";
     items.push({ id: uid("d"), time: Math.round(time * 100) / 100, text, viewer, color });
