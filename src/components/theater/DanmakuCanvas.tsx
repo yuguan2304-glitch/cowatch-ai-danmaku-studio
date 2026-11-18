@@ -47,7 +47,7 @@ export function DanmakuCanvas() {
     const canvas = canvasRef.current;
     if (!canvas || size.w === 0 || size.h === 0) return;
     // Keep mobile output sharp enough without multiplying full-screen GPU work.
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     canvas.width = Math.round(size.w * dpr);
     canvas.height = Math.round(size.h * dpr);
     const ctx = canvas.getContext("2d", { alpha: true });
@@ -56,7 +56,9 @@ export function DanmakuCanvas() {
     let lastTime = NaN;
     let lastDrawAt = -Infinity;
     const glyphCache = new Map<string, HTMLCanvasElement>();
-    const cacheMax = 120;
+    const cacheMax = 80;
+    const cachePixelBudget = 3_000_000; // ~12MB RGBA, bounded on Android
+    let cachedPixels = 0;
     const glyphHeight = Math.max(lineHeight + 6, Math.ceil(display.fontSize * 1.6) + 4);
 
     // Stroke/fill each caption ONCE into a small bitmap, then move that bitmap
@@ -86,8 +88,19 @@ export function DanmakuCanvas() {
       pen.strokeText(item.text, 4, 3);
       pen.fillStyle = item.color;
       pen.fillText(item.text, 4, 3);
+      const pixels = bitmap.width * bitmap.height;
+      if (pixels > cachePixelBudget / 2) return bitmap;
       glyphCache.set(key,bitmap);
-      if (glyphCache.size > cacheMax) glyphCache.delete(glyphCache.keys().next().value!);
+      cachedPixels += pixels;
+      while (glyphCache.size > cacheMax || cachedPixels > cachePixelBudget) {
+        const oldest = glyphCache.keys().next().value;
+        if (!oldest) break;
+        const evicted = glyphCache.get(oldest)!;
+        cachedPixels -= evicted.width * evicted.height;
+        glyphCache.delete(oldest);
+        evicted.width = 0;
+        evicted.height = 0;
+      }
       return bitmap;
     };
 
@@ -113,10 +126,15 @@ export function DanmakuCanvas() {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, size.w, size.h);
       ctx.globalAlpha = display.opacity;
+      ctx.imageSmoothingEnabled = false; // Avoid soft resampling of cached text glyphs
       for (const { item, x } of visibleAt(placed, t, size.w, display.crossSeconds, maxWidth)) {
         const y = 4 + item.lane * lineHeight;
         const bitmap = glyph(item);
-        if(bitmap) ctx.drawImage(bitmap, x - 4, y - 3, bitmap.width / dpr, bitmap.height / dpr);
+        if(bitmap) {
+          const sharpX = Math.round((x - 4) * dpr) / dpr;
+          const sharpY = Math.round((y - 3) * dpr) / dpr;
+          ctx.drawImage(bitmap, sharpX, sharpY, bitmap.width / dpr, bitmap.height / dpr);
+        }
         else {
           ctx.font = font;
           ctx.textBaseline = "top";
@@ -132,6 +150,7 @@ export function DanmakuCanvas() {
     raf = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(raf);
+      glyphCache.forEach(bitmap => {bitmap.width = 0; bitmap.height = 0;});
       glyphCache.clear();
     };
   }, [placed, maxWidth, size.w, size.h, font, lineHeight, display.enabled, display.opacity, display.crossSeconds, display.fontSize, display.timeOffset]);
