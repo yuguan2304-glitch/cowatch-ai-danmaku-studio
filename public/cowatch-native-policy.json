@@ -1,6 +1,6 @@
 {
-  "minNativeBuild": 89,
-  "minimumTag": "android-alpha-89",
+  "minNativeBuild": 124,
+  "minimumTag": "android-alpha-124",
   "webUpdates": true,
-  "notes": "共映 Alpha 89 起支持同应用存储空间内的联网功能更新；仅当原生外壳需要升级时才再次安装 APK。"
+  "notes": "旧版误将离线缓存回退当成在线更新成功；Alpha 124 起原生在线刷新会先检测服务端，标识在线/离线来源；低于此版本应正常提示 APK 升级。"
 }
