@@ -13,13 +13,13 @@ android {
     }
 
     defaultConfig {
-        applicationId offlineBundle ? 'dev.cowatch.player.alpha.safe2026' : 'dev.cowatch.player'
+        applicationId offlineBundle ? 'dev.cowatch.player.alpha.stable2026' : 'dev.cowatch.player'
         buildConfigField 'boolean', 'OFFLINE_BUNDLE', offlineBundle ? 'true' : 'false'
         resValue 'string', 'cowatch_app_name', offlineBundle ? '共映 Alpha 安全测试' : '共映 CoWatch'
         minSdk 26
         targetSdk 34
         versionCode Integer.parseInt(System.getenv('COWATCH_VERSION_CODE') ?: '2')
-        versionName System.getenv('COWATCH_VERSION_NAME') ?: '0.2.4-alpha'
+        versionName System.getenv('COWATCH_VERSION_NAME') ?: '0.2.5-alpha'
     }
 
     // Production signing is only configured inside a protected GitHub Action.
