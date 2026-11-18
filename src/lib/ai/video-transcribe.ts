@@ -23,6 +23,17 @@ async function transcriptCacheKey(file:File,service:string,maxSeconds:number|und
   const hash=new Uint8Array(await crypto.subtle.digest("SHA-256",merged));
   return "transcript:v2:"+Array.from(hash,v=>v.toString(16).padStart(2,"0")).join("");
 }
+/** Read already-paid transcript chunks without making any transcription request. */
+export async function recoverSavedVideoTranscript(opts:{
+  file:File; baseUrl:string; model:string;
+  backend?:"groq"|"cloudflare"|"custom"; maxSeconds?:number;
+}):Promise<Cue[]> {
+  const key=await transcriptCacheKey(opts.file,(opts.backend??"custom")+":"+opts.baseUrl+":"+opts.model,opts.maxSeconds);
+  const saved=await db.getLocalValue<SavedTranscript>(key);
+  return (saved?.completed??[]).flatMap(c=>c.cues).filter(c=>
+    Number.isFinite(c.start)&&Number.isFinite(c.end)&&c.end>c.start&&typeof c.text==="string"
+  ).sort((a,b)=>a.start-b.start);
+}
 export async function cloudflareTranscribeAudio(opts:{file:File;start:number;end:number;signal:AbortSignal}):Promise<{cues:Cue[];timestamped:boolean}>{
   const {readSyncCode}=await import("@/lib/cloud-sync");
   const code=readSyncCode();
