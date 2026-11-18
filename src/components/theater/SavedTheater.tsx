@@ -218,7 +218,7 @@ export function SavedTheater() {
               if((error as Error).name!=="AbortError") toast.error((error as Error).message,{duration:9000});
             });
           }}><Upload className="size-3.5"/> 手机分享原视频</Button>
-          <Button size="sm" variant="outline" onClick={() => { try { exportScreeningPackage(item); toast.message("已发起 .cowatch 放映包下载。只有在文件管理中看到文件且大小正常，才算真正导出成功。",{duration:9000}); } catch (error) { toast.error((error as Error).message); } }}><Download className="size-3.5"/> 导出放映包</Button>
+          <Button size="sm" variant="outline" onClick={() => { void exportScreeningPackage(item).then(message=>toast.message(message,{duration:9000})).catch(error=>{if((error as Error).name!=="AbortError")toast.error((error as Error).message,{duration:11000});}); }}><Download className="size-3.5"/> 导出放映包</Button>
         </>}
         <Button size="sm" variant="ghost" onClick={() => void remove(item)}><Trash2 className="size-3.5"/> 删除收藏</Button>
       </div>}
