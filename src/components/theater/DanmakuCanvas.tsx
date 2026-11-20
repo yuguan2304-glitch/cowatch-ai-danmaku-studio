@@ -87,8 +87,12 @@ export function DanmakuCanvas() {
       return paused ? raw : mediaAnchor + ((now - wallAnchor) / 1000) * rate;
     };
     const glyphCache = new Map<string, HTMLCanvasElement>();
-    const cacheMax = 80;
-    const cachePixelBudget = 3_000_000; // ~12MB RGBA, bounded on Android
+    // Long, large-font subtitles can evict the entire tiny cache while they
+    // are still scrolling. Re-rasterizing strokeText/fillText every paint
+    // causes the visible "freeze for several frames, then jump" symptom.
+    // 8M bitmap pixels = about 32MB RGBA at most, still bounded on Android.
+    const cacheMax = 120;
+    const cachePixelBudget = 8_000_000;
     let cachedPixels = 0;
     const glyphHeight = Math.max(lineHeight + 6, Math.ceil(display.fontSize * 1.6) + 4);
 
