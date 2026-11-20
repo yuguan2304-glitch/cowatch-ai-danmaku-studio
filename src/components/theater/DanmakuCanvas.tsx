@@ -55,6 +55,37 @@ export function DanmakuCanvas() {
     let raf = 0;
     let lastTime = NaN;
     let lastDrawAt = -Infinity;
+    // Smooth browser/WebView media-clock quantization without letting the
+    // danmaku timeline drift away from the real video after a seek or pause.
+    let clockSource: ReturnType<typeof getClock> = null;
+    let mediaAnchor = NaN;
+    let wallAnchor = NaN;
+    let previousRaw = NaN;
+    let wasPaused = true;
+    let previousRate = 1;
+    const smoothVideoTime = (clock: NonNullable<ReturnType<typeof getClock>>, now: number) => {
+      const raw = clock.getTime();
+      const paused = clock.isPaused();
+      const rate = clock.getRate();
+      if (!Number.isFinite(raw) || !Number.isFinite(rate) || rate <= 0) return raw;
+      const predicted = mediaAnchor + ((now - wallAnchor) / 1000) * rate;
+      const reset = clockSource !== clock || !Number.isFinite(wallAnchor)
+        || paused || wasPaused || rate !== previousRate
+        || raw < previousRaw - 0.08 || Math.abs(raw - predicted) > 0.35;
+      if (reset) {
+        mediaAnchor = raw;
+        wallAnchor = now;
+      } else if (raw > previousRaw + 0.001) {
+        // Gentle, bounded drift correction prevents visible snapping when
+        // currentTime updates in coarse steps on some Android WebViews.
+        mediaAnchor += Math.max(-0.012, Math.min(0.012, (raw - predicted) * 0.2));
+      }
+      clockSource = clock;
+      previousRaw = raw;
+      wasPaused = paused;
+      previousRate = rate;
+      return paused ? raw : mediaAnchor + ((now - wallAnchor) / 1000) * rate;
+    };
     const glyphCache = new Map<string, HTMLCanvasElement>();
     const cacheMax = 80;
     const cachePixelBudget = 3_000_000; // ~12MB RGBA, bounded on Android
@@ -115,7 +146,7 @@ export function DanmakuCanvas() {
         }
         return;
       }
-      const t = clock.getTime() - (display.timeOffset ?? 0);
+      const t = smoothVideoTime(clock, now) - (display.timeOffset ?? 0);
       // Reuse video time for smooth movement. At rest no redraw is needed.
       if (Math.abs(t - lastTime) < 0.005) return;
       // Target approximately 60fps if the device can sustain it; rAF
